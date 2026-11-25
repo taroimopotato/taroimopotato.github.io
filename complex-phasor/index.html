@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>複素数＝回る矢印 — 3つの物理で試す</title>
+<style>
+  body { font-family: system-ui, "Hiragino Kaku Gothic ProN", sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; color: #222; line-height: 1.6; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #555; font-size: 14px; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .tabs button { padding: 8px 14px; font-size: 14px; border: 1px solid #999; background: #fff; border-radius: 6px; cursor: pointer; }
+  .tabs button.active { background: #2255aa; color: #fff; border-color: #2255aa; }
+  .ctl { margin: 8px 0; font-size: 14px; }
+  .ctl label { display: inline-block; width: 190px; }
+  .ctl input[type=range] { width: 260px; vertical-align: middle; }
+  .ctl output { font-weight: bold; }
+  canvas { border: 1px solid #ccc; border-radius: 6px; display: block; margin: 10px 0; max-width: 100%; }
+  .nums { font-size: 14px; background: #f6f6f6; border-radius: 6px; padding: 10px 12px; }
+  .nums b { font-size: 15px; }
+  .in { color: #2255aa; } .out { color: #cc6600; }
+  .note { font-size: 13px; color: #555; }
+  .model-desc { font-size: 14px; background: #eef4ff; border-radius: 6px; padding: 10px 12px; }
+  button.play { padding: 6px 16px; font-size: 14px; margin: 6px 0; }
+</style>
+</head>
+<body>
+<h1>複素数＝回る矢印</h1>
+<p class="sub">入力の矢印を回すと、出力の矢印は「縮んで（|H|倍）、遅れて（arg H だけ回って）」出てくる。
+実数で測れる量は、その矢印の実軸への影。虚部は「想像」ではなく、1/4周期先の値＝未来を決めるために必要な、もう半分の状態。</p>
+
+<div class="tabs">
+  <button id="tab-smd" class="active">① バネ・マス・ダンパ</button>
+  <button id="tab-acc">② アキュムレータ（圧力波）</button>
+  <button id="tab-coil">③ コイル（交流回路）</button>
+  <button id="tab-cap">④ キャパシタ（交流回路）</button>
+</div>
+
+<div class="model-desc" id="modelDesc"></div>
+
+<h3>モデルの概要図 <span class="note">— 青＝入力、橙＝出力の場所</span></h3>
+<canvas id="diagram" width="640" height="220"></canvas>
+
+<div class="ctl"><label>駆動角周波数 ω</label>
+  <input type="range" id="omega" min="0.5" max="30" step="0.1" value="10">
+  <output id="omegaOut"></output>
+  <button id="eigenBtn" style="margin-left:8px; padding:4px 10px; font-size:13px;">固有値にセット</button></div>
+<div class="ctl"><label id="paramLabel">減衰係数 c</label>
+  <input type="range" id="param" min="0.5" max="20" step="0.5" value="4">
+  <output id="paramOut"></output></div>
+<button class="play" id="playBtn">⏸ 止める</button>
+
+<h3>フェーザ（回る矢印） <span class="note">— 青＝入力、橙＝出力。点線は実軸への影＝その瞬間に測れる値。出力矢印の長さはそのモデルの最大値で規格化（絶対値は下の数値で）</span></h3>
+<canvas id="phasor" width="640" height="340"></canvas>
+
+<h3><span id="traceInName">力 F のグラフ</span> <span class="note">— どちらのグラフにも入力（青）と出力（橙）の2本を表示。入出力が同じ物理量のモデル（バネマスの変位、アキュムレータの圧力）は実際の振幅比で描いてある。縦の線は今の時刻（フェーザの角度 θ=ωt と連動）</span></h3>
+<canvas id="traceIn" width="640" height="170"></canvas>
+<h3 id="traceOutName">変位 x のグラフ</h3>
+<canvas id="traceOut" width="640" height="170"></canvas>
+
+<h3>伝達関数 H(ω) の複素平面</h3>
+<canvas id="hplane" width="340" height="340"></canvas>
+
+<div class="nums" id="nums"></div>
+<p class="note" id="footNote"></p>
+
+<h3>ボード線図（自分で記録した点）</h3>
+<div class="ctl">
+  <button class="play" id="recordBtn">● この点を記録（ω・ゲイン・位相）</button>
+  <button class="play" id="clearBodeBtn">記録を全消去</button>
+  <span class="note" id="bodeInfo"></span>
+</div>
+<canvas id="bode" width="640" height="320"></canvas>
+<div class="nums" id="bodeList">まだ記録がありません。ωやパラメータを自分で合わせて「この点を記録」を押すと、点が増えていきます。</div>
+
+<script>
+"use strict";
+// ---------- models ----------
+// Each model returns { Hre, Him, inLabel, outLabel, inAmp, desc, foot, extra }
+// H = (output phasor) / (input phasor). Output amplitude = inAmp * |H|.
+const MODELS = {
+  smd: {
+    name: "バネ・マス・ダンパ",
+    omegaMin: 0.5, omegaMax: 30, omegaStep: 0.1, omegaDef: 10,
+    paramLabel: "減衰係数 c [N·s/m]", paramMin: 0.5, paramMax: 20, paramStep: 0.5, paramDef: 4,
+    eigen: function (p) { return { value: 10, label: "固有値 ω₀=10（共振）にセット" }; },
+    desc: "強制変位のモデル。加振点を y = Y cos ωt（Y=0.01m）と強制的に動かすと、バネとダンパ（並列）を通してマスが x だけ動く。" +
+      "m=1kg, k=100N/m。変位の伝達率 X/Y = (k + iωc) / (k − mω² + iωc)。入力は加振点の変位と力、出力はマスの変位と、バネ・ダンパからマスに伝わる力。",
+    foot: "変位のグラフ：入力＝加振点変位 y、出力＝マス変位 x（同じ単位なので実際の振幅比で描いてある）。" +
+      "力のグラフ：入力＝加振点の力、出力＝バネ・ダンパからマスに伝わる力。バネ・ダンパは質量のない要素なので、この2つの力は大きさも位相も一致して重なる（力はそのまま伝わり、変わるのは変位の方）。",
+    calc: function (w, c) {
+      const m = 1, k = 100, Y = 0.01;
+      // H = X/Y = (k + i·wc) / ((k - m w^2) + i·wc)
+      const nr = k, ni = w * c;
+      const dr = k - m * w * w, di = w * c;
+      const den = dr * dr + di * di;
+      const Hre = (nr * dr + ni * di) / den, Him = (ni * dr - nr * di) / den;
+      // Force transmitted to the mass = m * x'' -> phasor -m w^2 * X = -m w^2 * H * Y
+      const Fre = -m * w * w * Hre * Y, Fim = -m * w * w * Him * Y;
+      const fAmp = Math.hypot(Fre, Fim), fPhase = Math.atan2(Fim, Fre);
+      return { Hre: Hre, Him: Him, inAmp: Y, inUnit: "m", outUnit: "m",
+        inLabel: "加振点変位 y", outLabel: "マス変位 x",
+        traceMode: "smd", fAmp: fAmp, fPhase: fPhase,
+        extra: "ω₀ = √(k/m) = 10 rad/s（共振）　／　伝わる力の振幅 " + fAmp.toFixed(3) + " N、位相 " +
+          (fPhase * 180 / Math.PI).toFixed(1) + "°（加振点の力とマスに伝わる力は一致）" };
+    }
+  },
+  acc: {
+    name: "アキュムレータ",
+    omegaMin: 0.1, omegaMax: 20, omegaStep: 0.1, omegaDef: 2,
+    paramLabel: "時定数 τ = RC [s]", paramMin: 0.1, paramMax: 2, paramStep: 0.05, paramDef: 0.5,
+    eigen: function (tau) { return { value: 1 / tau, label: "固有値 ωc=1/τ=" + (1 / tau).toFixed(2) + "（カットオフ）にセット" }; },
+    desc: "圧力の伝達関数 H = 1/(1 + iωτ)。配管抵抗 R とアキュムレータの容量 C で決まる時定数 τ が、" +
+      "どの周波数から鈍り始めるかを決める。ωτ=1 で振幅 1/√2、遅れちょうど45°。",
+    foot: "高い周波数ほど |H| が小さくなる＝バースト波の角（高周波成分）が取れて鈍る理由。" +
+      "実部＝遅れずに通る分、虚部＝1/4周期遅れて出てくる分。" +
+      "時刻歴グラフは入出力とも圧力（同じ量）なので、実際の振幅比で描いてある（出力の波の高さ＝入力×|H|）。",
+    calc: function (w, tau) {
+      const den = 1 + (w * tau) * (w * tau);
+      return { Hre: 1 / den, Him: -w * tau / den, inAmp: 1, inUnit: "（規格化）", outUnit: "（規格化）",
+        inLabel: "入口圧力 p₁", outLabel: "出口圧力 p₂", traceMode: "pair",
+        extra: "カットオフ角周波数 ωc = 1/τ = " + (1 / tau).toFixed(2) + " rad/s" };
+    }
+  },
+  coil: {
+    name: "コイル",
+    omegaMin: 1, omegaMax: 500, omegaStep: 1, omegaDef: 100,
+    paramLabel: "インダクタンス L [H]", paramMin: 0.02, paramMax: 0.5, paramStep: 0.01, paramDef: 0.1,
+    eigen: function (L) { return { value: 10 / L, label: "固有値 ω=R/L=" + (10 / L).toFixed(0) + "（ωL=R で -45°）にセット" }; },
+    desc: "電圧 V₀cos ωt を R=10Ω とコイル L の直列回路に入れると、電流 I = V₀/(R + iωL)。" +
+      "インピーダンス Z = R + iωL の実部 R は熱になる分、虚部 ωL は磁界に溜めて返す分。",
+    foot: "電流は電圧より遅れる。遅れ角は atan(ωL/R)。ωL ≫ R ではほぼ90°遅れ＝コイルがエネルギーを蓄えて返すだけになる。" +
+      "電圧のグラフ：入力＝電源電圧、出力＝コイル両端の電圧（同じ単位なので実際の振幅比で描画）。" +
+      "電流のグラフ：直列回路なので電源から出る電流とコイルを流れる電流は同じで、2本は重なる。",
+    calc: function (w, L) {
+      const R = 10, V0 = 10;
+      const den = R * R + (w * L) * (w * L);
+      const Hre = R / den, Him = -w * L / den; // 1/(R + iωL)
+      // Coil voltage phasor V_L = i·wL · I, with I = V0 * (Hre + i·Him)
+      const vLre = -w * L * V0 * Him, vLim = w * L * V0 * Hre;
+      const vLAmp = Math.hypot(vLre, vLim), vLPhase = Math.atan2(vLim, vLre);
+      return { Hre: Hre, Him: Him, inAmp: V0, inUnit: "V", outUnit: "A",
+        inLabel: "電圧 V", outLabel: "電流 I", traceMode: "coil",
+        vLAmp: vLAmp, vLPhase: vLPhase,
+        extra: "Z = " + R + " + i·" + (w * L).toFixed(1) + " Ω　（実部＝抵抗、虚部＝コイル）　／　コイル両端電圧の振幅 " +
+          vLAmp.toFixed(2) + " V、位相 " + (vLPhase * 180 / Math.PI).toFixed(1) + "°（電源電圧基準）" };
+    }
+  },
+  cap: {
+    name: "キャパシタ",
+    omegaMin: 0.5, omegaMax: 200, omegaStep: 0.5, omegaDef: 10,
+    paramLabel: "静電容量 C [F]", paramMin: 0.001, paramMax: 0.05, paramStep: 0.001, paramDef: 0.01,
+    eigen: function (C) { return { value: 1 / (10 * C), label: "固有値 ωc=1/(RC)=" + (1 / (10 * C)).toFixed(1) + "（電流が45°進む点）にセット" }; },
+    desc: "電圧 V₀cos ωt を R=10Ω とコンデンサ C の直列回路に入れると、電流 I = V₀·(iωC)/(1 + iωCR)。" +
+      "コンデンサのインピーダンス 1/(iωC) は実部がゼロ＝熱にならず、蓄えて返すだけ。電流は電圧より進む（コイルと逆）。",
+    foot: "電流は電圧より進む。進み角は最大90°（ω→0 でコンデンサが支配的）から、ω→∞ で0°（抵抗だけが見える）に近づく。" +
+      "電圧のグラフ：入力＝電源電圧、出力＝コンデンサ両端の電圧（同じ単位なので実際の振幅比で描画）。" +
+      "電流のグラフ：直列回路なので電源から出る電流とコンデンサを流れる電流は同じで、2本は重なる。",
+    calc: function (w, C) {
+      const R = 10, V0 = 10;
+      const a = w * C * R; // ωCR
+      const den = R * (1 + a * a);
+      const Hre = a * a / den, Him = a / den; // I/V0 = iωC/(1 + iωCR)
+      // Capacitor voltage phasor V_C = I / (i·wC) = -i·I/(wC), I = V0*(Hre + i·Him)
+      const vCre = V0 * Him / (w * C), vCim = -V0 * Hre / (w * C);
+      const vCAmp = Math.hypot(vCre, vCim), vCPhase = Math.atan2(vCim, vCre);
+      return { Hre: Hre, Him: Him, inAmp: V0, inUnit: "V", outUnit: "A",
+        inLabel: "電圧 V", outLabel: "電流 I", traceMode: "cap",
+        vCAmp: vCAmp, vCPhase: vCPhase,
+        extra: "Z = " + R + " − i·" + (1 / (w * C)).toFixed(1) + " Ω　（実部＝抵抗、虚部＝コンデンサ）　／　コンデンサ両端電圧の振幅 " +
+          vCAmp.toFixed(2) + " V、位相 " + (vCPhase * 180 / Math.PI).toFixed(1) + "°（電源電圧基準）" };
+    }
+  }
+};
+
+let modelKey = "smd";
+let playing = true;
+let t = 0, lastTs = null;
+let omegaVal = 10; // actual angular frequency; the slider itself is a log-scale position
+
+const $ = id => document.getElementById(id);
+const omegaEl = $("omega"), paramEl = $("param");
+
+function fmt(x, d) { d = (d === undefined) ? 3 : d; return Number(x).toPrecision(d); }
+
+// Log frequency slider: centre = the model's eigen value for the current
+// parameter, range = centre / 100 .. centre * 100 (2 decades each way).
+// Slider position 0..200 maps to centre * 10^((pos-100)/50).
+function eigenCenter() {
+  const m = MODELS[modelKey];
+  return m.eigen ? m.eigen(parseFloat(paramEl.value)).value : 10;
+}
+function syncOmegaSlider() {
+  const cen = eigenCenter();
+  const pos = 100 + 50 * Math.log10(omegaVal / cen);
+  omegaEl.value = Math.round(Math.min(200, Math.max(0, pos)));
+}
+
+function current() {
+  const w = omegaVal;
+  const p = parseFloat(paramEl.value);
+  const m = MODELS[modelKey];
+  const r = m.calc(w, p);
+  const mag = Math.hypot(r.Hre, r.Him);
+  const phase = Math.atan2(r.Him, r.Hre); // rad, negative = lag
+  return { w: w, p: p, m: m, r: r, mag: mag, phase: phase, cen: eigenCenter() };
+}
+
+function selectModel(key) {
+  modelKey = key;
+  const m = MODELS[key];
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+  $("tab-" + key).classList.add("active");
+  omegaEl.min = 0; omegaEl.max = 200; omegaEl.step = 1; // log-position slider
+  paramEl.min = m.paramMin; paramEl.max = m.paramMax; paramEl.step = m.paramStep; paramEl.value = m.paramDef;
+  omegaVal = eigenCenter(); // start at the eigen value (slider centre)
+  syncOmegaSlider();
+  $("paramLabel").textContent = m.paramLabel;
+  $("modelDesc").textContent = m.desc;
+  $("footNote").textContent = m.foot;
+  t = 0;
+  update();
+}
+
+function update() {
+  const c = current();
+  const f = c.w / (2 * Math.PI);
+  $("omegaOut").textContent = fmt(c.w) + " rad/s（f = " + fmt(f) + " Hz）　範囲：" +
+    fmt(c.cen / 100) + " 〜 " + fmt(c.cen * 100) + "（中心＝固有値 " + fmt(c.cen) + "、対数）";
+  if (c.m.eigen) $("eigenBtn").textContent = c.m.eigen(c.p).label;
+  if (c.r.traceMode === "smd") {
+    $("traceInName").textContent = "変位のグラフ（入力＝加振点変位／出力＝マス変位）";
+    $("traceOutName").textContent = "力のグラフ（入力＝加振点の力／出力＝バネ・ダンパからマスに伝わる力）";
+  } else if (c.r.traceMode === "coil") {
+    $("traceInName").textContent = "電圧のグラフ（入力＝電源電圧／出力＝コイル両端の電圧）";
+    $("traceOutName").textContent = "電流のグラフ（入力＝電源から出る電流／出力＝コイルを流れる電流）";
+  } else if (c.r.traceMode === "cap") {
+    $("traceInName").textContent = "電圧のグラフ（入力＝電源電圧／出力＝コンデンサ両端の電圧）";
+    $("traceOutName").textContent = "電流のグラフ（入力＝電源から出る電流／出力＝コンデンサを流れる電流）";
+  } else {
+    $("traceInName").textContent = c.r.inLabel + " のグラフ";
+    $("traceOutName").textContent = c.r.outLabel + " のグラフ";
+  }
+  $("paramOut").textContent = c.p + (modelKey === "smd" ? " N·s/m" : modelKey === "acc" ? " s" : modelKey === "cap" ? " F" : " H");
+  const outAmp = c.r.inAmp * c.mag;
+  $("nums").innerHTML =
+    "<b>|H| = " + fmt(c.mag) + "　　arg H = " + (c.phase * 180 / Math.PI).toFixed(1) + "°（−は遅れ）</b><br>" +
+    "H = " + fmt(c.r.Hre) + " + " + fmt(c.r.Him) + " i　（実部＝同位相成分、虚部＝90°ずれ成分）<br>" +
+    c.r.inLabel + "の振幅 " + c.r.inAmp + " " + c.r.inUnit + "　→　" + c.r.outLabel + "の振幅 " +
+    fmt(outAmp) + " " + c.r.outUnit + "<br>" + c.r.extra;
+  draw(c);
+}
+
+// ---------- drawing ----------
+function draw(c) {
+  drawPhasor(c);
+  drawTraces(c);
+  drawHplane(c);
+  drawDiagram(c);
+  drawBode(c);
+}
+
+// ---------- model schematic diagrams (blue = input, orange = output) ----------
+function dText(ctx, txt, x, y, color, bold, size) {
+  ctx.fillStyle = color || "#333";
+  ctx.font = (bold ? "bold " : "") + (size || 13) + "px sans-serif";
+  ctx.fillText(txt, x, y);
+}
+function dLine(ctx, x0, y0, x1, y1, color, w) {
+  ctx.strokeStyle = color || "#333"; ctx.lineWidth = w || 1.5;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+}
+function dRect(ctx, x, y, w, h, fill, stroke) {
+  if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h); }
+}
+function dSpring(ctx, x0, x1, y) {
+  const n = 16; // half-segments
+  ctx.strokeStyle = "#333"; ctx.lineWidth = 1.8; ctx.beginPath();
+  ctx.moveTo(x0, y);
+  for (let i = 1; i < n; i++) {
+    const xx = x0 + (x1 - x0) * i / n;
+    ctx.lineTo(xx, y + (i % 2 === 1 ? -11 : 11));
+  }
+  ctx.lineTo(x1, y);
+  ctx.stroke();
+}
+function dDoubleArrow(ctx, x0, x1, y, color) {
+  drawArrow(ctx, x0, y, x1, y, color, 2);
+  drawArrow(ctx, x1, y, x0, y, color, 2);
+}
+
+function drawDiagram(c) {
+  const cv = $("diagram");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (modelKey === "smd") diagSmd(ctx);
+  else if (modelKey === "acc") diagAcc(ctx);
+  else if (modelKey === "coil") diagRL(ctx, false);
+  else if (modelKey === "cap") diagRL(ctx, true);
+}
+
+function diagSmd(ctx) {
+  // ground
+  dLine(ctx, 36, 182, 604, 182, "#999", 1.5);
+  for (let x = 44; x < 600; x += 18) dLine(ctx, x, 182, x - 7, 192, "#bbb", 1);
+  // exciter wall (driven point)
+  dRect(ctx, 58, 92, 26, 90, "#dbe7ff", "#2255aa");
+  dText(ctx, "加振点", 50, 204, "#2255aa", true);
+  // y input arrow
+  dDoubleArrow(ctx, 40, 100, 62, "#2255aa");
+  dText(ctx, "入力：加振点変位 y", 108, 67, "#2255aa", true);
+  // spring (top) and damper (bottom) in parallel
+  dSpring(ctx, 84, 272, 110);
+  dText(ctx, "バネ k", 150, 92, "#333");
+  dLine(ctx, 84, 152, 148, 152, "#333", 1.8);
+  dRect(ctx, 148, 140, 56, 24, "#fff", "#333");
+  dLine(ctx, 196, 141, 196, 163, "#333", 2.5);
+  dLine(ctx, 204, 152, 272, 152, "#333", 1.8);
+  dText(ctx, "ダンパ c", 140, 178, "#333");
+  // mass
+  dRect(ctx, 272, 96, 100, 86, "#ffe3c2", "#cc6600");
+  dText(ctx, "マス", 312, 134, "#333", true, 15);
+  dText(ctx, "m = 1 kg", 296, 156, "#333");
+  // x output arrow
+  dDoubleArrow(ctx, 276, 368, 62, "#cc6600");
+  dText(ctx, "出力：マス変位 x", 376, 67, "#cc6600", true);
+  // force note
+  dText(ctx, "力：", 420, 120, "#333", true);
+  dText(ctx, "入力＝加振点の力", 420, 142, "#2255aa", true);
+  dText(ctx, "出力＝バネ・ダンパからマスに伝わる力", 420, 164, "#cc6600", true);
+  dText(ctx, "（質量のない要素を通るので両者は一致）", 420, 186, "#888", false, 12);
+}
+
+function diagAcc(ctx) {
+  // pipe walls
+  dLine(ctx, 36, 78, 604, 78, "#333", 2);
+  dLine(ctx, 36, 102, 604, 102, "#333", 2);
+  // flow arrow
+  drawArrow(ctx, 90, 90, 150, 90, "#999", 2);
+  // inlet / outlet labels
+  dText(ctx, "入力：入口圧力 p₁", 36, 58, "#2255aa", true);
+  dText(ctx, "出力：出口圧力 p₂", 452, 58, "#cc6600", true);
+  // throttle (pipe resistance R)
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#333"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(238, 78); ctx.lineTo(238, 102); ctx.lineTo(258, 90); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(278, 78); ctx.lineTo(278, 102); ctx.lineTo(258, 90); ctx.closePath(); ctx.fill(); ctx.stroke();
+  dText(ctx, "配管抵抗 R", 216, 128, "#333");
+  // branch to accumulator
+  dLine(ctx, 408, 102, 408, 142, "#333", 2);
+  dLine(ctx, 432, 102, 432, 142, "#333", 2);
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#333"; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.arc(420, 170, 28, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  // gas cushion (top of the vessel)
+  ctx.fillStyle = "#dbe7ff";
+  ctx.beginPath(); ctx.arc(420, 170, 26, Math.PI * 1.15, Math.PI * 1.85); ctx.lineTo(420 + 24, 158); ctx.lineTo(420 - 24, 158); ctx.closePath(); ctx.fill();
+  dText(ctx, "気体", 406, 156, "#2255aa", false, 11);
+  dText(ctx, "アキュムレータ", 458, 164, "#333", true);
+  dText(ctx, "容量 C（圧力の変化を吸収）", 458, 186, "#333");
+  dText(ctx, "H = p₂/p₁ = 1/(1 + iωτ)、τ = RC", 36, 208, "#888", false, 12);
+}
+
+function diagRL(ctx, isCap) {
+  const top = 48, bot = 168, left = 110, right = 500;
+  // source (left side)
+  dLine(ctx, left, top, left, 84, "#333", 1.8);
+  ctx.strokeStyle = "#2255aa"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(left, 110, 26, 0, 2 * Math.PI); ctx.stroke();
+  dText(ctx, "〜", left - 8, 118, "#2255aa", true, 20);
+  dLine(ctx, left, 136, left, bot, "#333", 1.8);
+  dText(ctx, "入力：電源電圧 V", 22, 204, "#2255aa", true);
+  // top wire + resistor
+  dLine(ctx, left, top, 190, top, "#333", 1.8);
+  dRect(ctx, 190, 40, 84, 16, "#fff", "#333");
+  dText(ctx, "R = 10 Ω", 198, 30, "#333");
+  dLine(ctx, 274, top, isCap ? 330 : 330, top, "#333", 1.8);
+  if (!isCap) {
+    // coil: bumps along the top wire
+    ctx.strokeStyle = "#333"; ctx.lineWidth = 1.8;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.arc(347 + i * 35, top, 17.5, 0, Math.PI); ctx.stroke();
+    }
+    dLine(ctx, 470, top, right, top, "#333", 1.8);
+    dText(ctx, "L（コイル）", 366, 30, "#333");
+    // V_L measurement (dashed)
+    ctx.setLineDash([4, 4]);
+    dLine(ctx, 330, 70, 330, 122, "#cc6600", 1.2);
+    dLine(ctx, 470, 70, 470, 122, "#cc6600", 1.2);
+    dLine(ctx, 330, 122, 470, 122, "#cc6600", 1.2);
+    ctx.setLineDash([]);
+    dText(ctx, "出力：コイル両端の電圧 V_L", 300, 144, "#cc6600", true);
+  } else {
+    // capacitor on the right vertical wire instead
+    dLine(ctx, 330, top, right, top, "#333", 1.8);
+    dLine(ctx, right, top, right, 92, "#333", 1.8);
+    dLine(ctx, 474, 100, 526, 100, "#333", 2.5);
+    dLine(ctx, 474, 112, 526, 112, "#333", 2.5);
+    dLine(ctx, right, 112, right, bot, "#333", 1.8);
+    dText(ctx, "C（コンデンサ）", 392, 106, "#333");
+    // V_C measurement (dashed) on the right
+    ctx.setLineDash([4, 4]);
+    dLine(ctx, 526, 100, 552, 100, "#cc6600", 1.2);
+    dLine(ctx, 526, 112, 552, 112, "#cc6600", 1.2);
+    dLine(ctx, 552, 100, 552, 112, "#cc6600", 1.2);
+    ctx.setLineDash([]);
+    dText(ctx, "出力：コンデンサ両端の電圧 V_C", 330, 204, "#cc6600", true);
+  }
+  if (!isCap) dLine(ctx, right, top, right, bot, "#333", 1.8);
+  // bottom wire + current arrow (output)
+  dLine(ctx, right, bot, left, bot, "#333", 1.8);
+  drawArrow(ctx, 400, bot, 316, bot, "#cc6600", 2.5);
+  dText(ctx, "出力：電流 I", 316, 196, "#cc6600", true);
+}
+
+// SMD (forced displacement): two graphs, one per physical quantity.
+// Displacement graph: input = exciter displacement y, output = mass displacement x,
+// drawn at their true relative amplitudes (same unit).
+// Force graph: input = force at the exciter point, output = force transmitted
+// from spring/damper to the mass. The connecting element is massless, so the
+// two forces coincide; the output is drawn dashed so both lines stay visible.
+function drawSmdTraces(c, T) {
+  const w = c.w, mag = c.mag, phase = c.phase;
+  const dScale = Math.max(1, mag);
+  drawPairTrace($("traceIn"), c, T, [
+    { fn: function (tt) { return Math.cos(w * tt) / dScale; }, color: "#2255aa", width: 2.5, dash: false,
+      label: "入力：加振点変位 y　振幅 " + c.r.inAmp + " m" },
+    { fn: function (tt) { return mag * Math.cos(w * tt + phase) / dScale; }, color: "#cc6600", width: 2.5, dash: false,
+      label: "出力：マス変位 x　振幅 " + fmt(c.r.inAmp * mag) + " m　遅れ " + (-phase * 180 / Math.PI).toFixed(1) + "°" }
+  ]);
+  const fp = c.r.fPhase;
+  drawPairTrace($("traceOut"), c, T, [
+    { fn: function (tt) { return Math.cos(w * tt + fp); }, color: "#2255aa", width: 2.5, dash: false,
+      label: "入力：加振点の力　振幅 " + c.r.fAmp.toFixed(3) + " N" },
+    { fn: function (tt) { return Math.cos(w * tt + fp); }, color: "#cc6600", width: 2, dash: true,
+      label: "出力：バネ・ダンパからマスに伝わる力（入力と一致して重なる）" }
+  ]);
+}
+
+function drawPairTrace(cv, c, T, lines) {
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const mid = H / 2, amp = H / 2 - 40;
+  ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
+  lines.forEach(function (ln) {
+    if (ln.dash) ctx.setLineDash([6, 4]);
+    trace(ctx, W, mid, amp, ln.color, ln.fn, T, ln.width);
+    ctx.setLineDash([]);
+  });
+  const span = 2 * T;
+  const cur = ((t % span) + span) % span;
+  const px = (cur / span) * W;
+  ctx.strokeStyle = "#999"; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(px, 6); ctx.lineTo(px, H - 6); ctx.stroke();
+  ctx.setLineDash([]);
+  lines.forEach(function (ln) { dot(ctx, px, mid - amp * ln.fn(cur), ln.color); });
+  lines.forEach(function (ln, i) {
+    ctx.fillStyle = ln.color; ctx.font = (i === 0 ? "bold 13px" : "12px") + " sans-serif";
+    ctx.fillText(ln.label, 12, 20 + i * 18);
+  });
+  ctx.fillStyle = "#888"; ctx.font = "12px sans-serif";
+  ctx.fillText("0", 8, H - 8);
+  ctx.fillText("1周期", W / 2 - 12, H - 8);
+  ctx.fillText("2周期", W - 40, H - 8);
+}
+
+// Models whose input and output are the same physical quantity (accumulator:
+// pressure in / pressure out). Both graphs show both traces at their TRUE
+// relative amplitudes: input height = inAmp, output height = inAmp * |H|.
+function drawPairTraces(c, T) {
+  const w = c.w, mag = c.mag, phase = c.phase;
+  const dScale = Math.max(1, mag);
+  const inLine = { fn: function (tt) { return Math.cos(w * tt) / dScale; }, color: "#2255aa", width: 2.5, dash: false,
+    label: "入力：" + c.r.inLabel + "　振幅 " + c.r.inAmp + " " + c.r.inUnit };
+  const outLine = { fn: function (tt) { return mag * Math.cos(w * tt + phase) / dScale; }, color: "#cc6600", width: 2.5, dash: false,
+    label: "出力：" + c.r.outLabel + "　振幅 " + fmt(c.r.inAmp * mag) + " " + c.r.outUnit +
+      "　遅れ " + (-phase * 180 / Math.PI).toFixed(1) + "°" };
+  drawPairTrace($("traceIn"), c, T, [inLine, outLine]);
+  drawPairTrace($("traceOut"), c, T, [outLine, inLine]);
+}
+
+// Coil (series RL): two graphs, one per physical quantity.
+// Voltage graph: input = source voltage V, output = voltage across the coil
+// V_L = i·wL·I (same unit, drawn at true relative amplitudes).
+// Current graph: input = current leaving the source, output = current
+// through the coil. Series circuit: they are the same current, so the two
+// traces coincide (output drawn dashed), like force in the SMD model.
+function drawCoilTraces(c, T) {
+  const w = c.w, phase = c.phase;
+  const vMax = Math.max(c.r.inAmp, c.r.vLAmp);
+  drawPairTrace($("traceIn"), c, T, [
+    { fn: function (tt) { return (c.r.inAmp / vMax) * Math.cos(w * tt); }, color: "#2255aa", width: 2.5, dash: false,
+      label: "入力：電源電圧 V　振幅 " + c.r.inAmp + " V" },
+    { fn: function (tt) { return (c.r.vLAmp / vMax) * Math.cos(w * tt + c.r.vLPhase); }, color: "#cc6600", width: 2.5, dash: false,
+      label: "出力：コイル両端の電圧 V_L　振幅 " + c.r.vLAmp.toFixed(2) + " V　位相 " +
+        (c.r.vLPhase * 180 / Math.PI).toFixed(1) + "°" }
+  ]);
+  const iAmp = c.r.inAmp * c.mag;
+  drawPairTrace($("traceOut"), c, T, [
+    { fn: function (tt) { return Math.cos(w * tt + phase); }, color: "#2255aa", width: 2.5, dash: false,
+      label: "入力：電源から出る電流　振幅 " + fmt(iAmp) + " A" },
+    { fn: function (tt) { return Math.cos(w * tt + phase); }, color: "#cc6600", width: 2, dash: true,
+      label: "出力：コイルを流れる電流（直列なので入力と一致して重なる）" }
+  ]);
+}
+
+// Capacitor (series RC): same layout as the coil model.
+// Voltage graph: input = source voltage, output = capacitor voltage
+// V_C = I/(i·wC) (true relative amplitudes). Current graph: source current
+// and capacitor current coincide (series), output dashed.
+function drawCapTraces(c, T) {
+  const w = c.w, phase = c.phase;
+  const vMax = Math.max(c.r.inAmp, c.r.vCAmp);
+  drawPairTrace($("traceIn"), c, T, [
+    { fn: function (tt) { return (c.r.inAmp / vMax) * Math.cos(w * tt); }, color: "#2255aa", width: 2.5, dash: false,
+      label: "入力：電源電圧 V　振幅 " + c.r.inAmp + " V" },
+    { fn: function (tt) { return (c.r.vCAmp / vMax) * Math.cos(w * tt + c.r.vCPhase); }, color: "#cc6600", width: 2.5, dash: false,
+      label: "出力：コンデンサ両端の電圧 V_C　振幅 " + c.r.vCAmp.toFixed(2) + " V　位相 " +
+        (c.r.vCPhase * 180 / Math.PI).toFixed(1) + "°" }
+  ]);
+  const iAmp = c.r.inAmp * c.mag;
+  drawPairTrace($("traceOut"), c, T, [
+    { fn: function (tt) { return Math.cos(w * tt + phase); }, color: "#2255aa", width: 2.5, dash: false,
+      label: "入力：電源から出る電流　振幅 " + fmt(iAmp) + " A" },
+    { fn: function (tt) { return Math.cos(w * tt + phase); }, color: "#cc6600", width: 2, dash: true,
+      label: "出力：コンデンサを流れる電流（直列なので入力と一致して重なる）" }
+  ]);
+}
+
+function drawTraces(c) {
+  const T = 2 * Math.PI / c.w;
+  if (c.r.traceMode === "smd") { drawSmdTraces(c, T); return; }
+  if (c.r.traceMode === "pair") { drawPairTraces(c, T); return; }
+  if (c.r.traceMode === "coil") { drawCoilTraces(c, T); return; }
+  if (c.r.traceMode === "cap") { drawCapTraces(c, T); return; }
+  const outAmp = c.r.inAmp * c.mag;
+  const inFn = function (tt) { return Math.cos(c.w * tt); };
+  const outFn = function (tt) { return Math.cos(c.w * tt + c.phase); };
+  // Each graph shows BOTH traces: its own quantity as the thick line, the
+  // other quantity as a thin line (normalised) so the phase lag can be
+  // compared inside either graph.
+  drawOneTrace($("traceIn"), c, T, inFn,
+    "#2255aa", c.r.inLabel + "（入力）　振幅 " + c.r.inAmp + " " + c.r.inUnit,
+    outFn, "#cc6600", c.r.outLabel + "（出力）");
+  drawOneTrace($("traceOut"), c, T, outFn,
+    "#cc6600", c.r.outLabel + "（出力）　振幅 " + fmt(outAmp) + " " + c.r.outUnit +
+      "　遅れ " + (-c.phase * 180 / Math.PI).toFixed(1) + "°",
+    inFn, "#2255aa", c.r.inLabel + "（入力）");
+}
+
+function drawOneTrace(cv, c, T, fn, color, title, refFn, refColor, refLabel) {
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const mid = H / 2, amp = H / 2 - 34;
+  ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
+  // reference trace first (thin), then the main trace (thick)
+  ctx.globalAlpha = 0.75;
+  trace(ctx, W, mid, amp, refColor, refFn, T, 1);
+  ctx.globalAlpha = 1;
+  trace(ctx, W, mid, amp, color, fn, T, 2.5);
+  // current-time cursor, linked to the phasor angle theta = omega * t
+  const span = 2 * T;
+  const cur = ((t % span) + span) % span;
+  const px = (cur / span) * W;
+  ctx.strokeStyle = "#999"; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(px, 6); ctx.lineTo(px, H - 6); ctx.stroke();
+  ctx.setLineDash([]);
+  dot(ctx, px, mid - amp * refFn(cur), refColor);
+  dot(ctx, px, mid - amp * fn(cur), color);
+  ctx.fillStyle = color; ctx.font = "bold 13px sans-serif";
+  ctx.fillText(title, 12, 20);
+  ctx.fillStyle = refColor; ctx.font = "12px sans-serif";
+  ctx.fillText(refLabel + "（細線・規格化）", 12, 38);
+  ctx.fillStyle = "#888"; ctx.font = "12px sans-serif";
+  ctx.fillText("0", 8, H - 8);
+  ctx.fillText("1周期", W / 2 - 12, H - 8);
+  ctx.fillText("2周期", W - 40, H - 8);
+}
+
+function drawPhasor(c) {
+  const cv = $("phasor"), ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, R = 130;
+  ctx.clearRect(0, 0, W, H);
+  // axes
+  ctx.strokeStyle = "#bbb"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(20, cy); ctx.lineTo(W - 20, cy); ctx.moveTo(cx, 20); ctx.lineTo(cx, H - 20); ctx.stroke();
+  ctx.fillStyle = "#888"; ctx.font = "12px sans-serif";
+  ctx.fillText("実軸（測れる量）", W - 130, cy - 8);
+  ctx.fillText("虚軸（1/4周期先の値）", cx + 8, 32);
+  // Arrow length: input at fixed length; output length is |H| normalised by the
+  // model's maximum |H| over the slider range, so the phase lag stays visible
+  // even when the absolute gain is tiny (e.g. SMD |H| ~ 0.01). Absolute
+  // amplitudes are in the numbers box below the canvases.
+  const th = c.w * t; // rotating angle
+  const inA = th, outA = th + c.phase;
+  const inL = R * 0.85;
+  let maxMag = 0;
+  const scanLo = c.cen / 100, scanHi = c.cen * 100;
+  for (let i = 0; i <= 100; i++) {
+    const w = scanLo * Math.pow(scanHi / scanLo, i / 100);
+    const rr = c.m.calc(w, c.p);
+    maxMag = Math.max(maxMag, Math.hypot(rr.Hre, rr.Him));
+  }
+  const outRel = maxMag > 0 ? c.mag / maxMag : 0;
+  const oL = R * 0.85 * outRel;
+  drawArrow(ctx, cx, cy, cx + inL * Math.cos(inA), cy - inL * Math.sin(inA), "#2255aa", 3);
+  drawArrow(ctx, cx, cy, cx + oL * Math.cos(outA), cy - oL * Math.sin(outA), "#cc6600", 3);
+  // tip labels so input / output arrows are identifiable at a glance
+  ctx.font = "bold 13px sans-serif";
+  ctx.fillStyle = "#2255aa";
+  ctx.fillText("入力", cx + (inL + 10) * Math.cos(inA) - 13, cy - (inL + 10) * Math.sin(inA) + 4);
+  ctx.fillStyle = "#cc6600";
+  ctx.fillText("出力", cx + (oL + 10) * Math.cos(outA) - 13, cy - (oL + 10) * Math.sin(outA) + 4);
+  // projections (shadows on real axis)
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = "#2255aa"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx + inL * Math.cos(inA), cy - inL * Math.sin(inA)); ctx.lineTo(cx + inL * Math.cos(inA), cy); ctx.stroke();
+  ctx.strokeStyle = "#cc6600";
+  ctx.beginPath(); ctx.moveTo(cx + oL * Math.cos(outA), cy - oL * Math.sin(outA)); ctx.lineTo(cx + oL * Math.cos(outA), cy); ctx.stroke();
+  ctx.setLineDash([]);
+  // dots on real axis
+  dot(ctx, cx + inL * Math.cos(inA), cy, "#2255aa");
+  dot(ctx, cx + oL * Math.cos(outA), cy, "#cc6600");
+  ctx.font = "13px sans-serif";
+  ctx.fillStyle = "#2255aa"; ctx.fillText(c.r.inLabel + "（入力）", 24, 30);
+  ctx.fillStyle = "#cc6600"; ctx.fillText(c.r.outLabel + "（出力）", 24, 52);
+  ctx.fillStyle = "#888"; ctx.font = "12px sans-serif";
+  ctx.fillText("θ = ωt = " + ((th % (2 * Math.PI)) * 180 / Math.PI).toFixed(0) + "°", 24, H - 14);
+}
+
+function drawArrow(ctx, x0, y0, x1, y1, color, w) {
+  const ang = Math.atan2(y1 - y0, x1 - x0), len = Math.hypot(x1 - x0, y1 - y0);
+  if (len < 2) return;
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - 12 * Math.cos(ang - 0.4), y1 - 12 * Math.sin(ang - 0.4));
+  ctx.lineTo(x1 - 12 * Math.cos(ang + 0.4), y1 - 12 * Math.sin(ang + 0.4));
+  ctx.closePath(); ctx.fill();
+}
+
+function dot(ctx, x, y, color) {
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fill();
+}
+
+function trace(ctx, W, mid, amp, color, fn, T, width) {
+  ctx.strokeStyle = color; ctx.lineWidth = width || 2; ctx.beginPath();
+  for (let px = 0; px <= W; px += 2) {
+    const tt = (px / W) * 2 * T;
+    const y = mid - amp * fn(tt);
+    if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+  }
+  ctx.stroke();
+}
+
+function drawHplane(c) {
+  const cv = $("hplane"), ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2;
+  ctx.clearRect(0, 0, W, H);
+  const scale = Math.max(Math.abs(c.r.Hre), Math.abs(c.r.Him), c.mag, 1e-6);
+  const R = 120, s = R / scale;
+  ctx.strokeStyle = "#bbb"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(10, cy); ctx.lineTo(W - 10, cy); ctx.moveTo(cx, 10); ctx.lineTo(cx, H - 10); ctx.stroke();
+  ctx.fillStyle = "#888"; ctx.font = "12px sans-serif";
+  ctx.fillText("Re H", W - 44, cy - 8);
+  ctx.fillText("Im H", cx + 8, 22);
+  const px = cx + c.r.Hre * s, py = cy - c.r.Him * s;
+  // components
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = "#2255aa";
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px, cy); ctx.stroke();
+  ctx.strokeStyle = "#cc6600";
+  ctx.beginPath(); ctx.moveTo(px, cy); ctx.lineTo(px, py); ctx.stroke();
+  ctx.setLineDash([]);
+  drawArrow(ctx, cx, cy, px, py, "#333", 2);
+  dot(ctx, px, py, "#333");
+  ctx.fillStyle = "#333"; ctx.font = "13px sans-serif";
+  ctx.fillText("H(ω)", Math.min(px + 8, W - 52), Math.max(py - 8, 16));
+  ctx.fillStyle = "#2255aa"; ctx.font = "12px sans-serif";
+  ctx.fillText("実部 " + fmt(c.r.Hre), 12, H - 28);
+  ctx.fillStyle = "#cc6600";
+  ctx.fillText("虚部 " + fmt(c.r.Him), 12, H - 10);
+}
+
+// ---------- Bode plot from manually recorded points ----------
+let bodePoints = []; // { model, w, p, mag, phase }
+
+function drawBode(c) {
+  const cv = $("bode");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const pts = bodePoints.filter(function (q) { return q.model === modelKey && q.p === c.p; })
+    .slice().sort(function (a, b) { return a.w - b.w; });
+  $("bodeInfo").textContent = "記録 全" + bodePoints.length + "点 ／ 現在の設定（" + c.m.name + "、パラメータ " + c.p + "）で表示 " + pts.length + "点";
+  const list = bodePoints.map(function (q, i) {
+    return (i + 1) + ". " + MODELS[q.model].name + "　ω=" + fmt(q.w) + "　パラメータ=" + q.p +
+      "　→　|H|=" + fmt(q.mag) + "（" + (20 * Math.log10(q.mag)).toFixed(1) + " dB）、位相 " +
+      (q.phase * 180 / Math.PI).toFixed(1) + "°";
+  });
+  $("bodeList").innerHTML = list.length ? list.join("<br>") :
+    "まだ記録がありません。ωやパラメータを自分で合わせて「この点を記録」を押すと、点が増えていきます。";
+  const x0 = 56, x1 = W - 16;
+  const lx0 = Math.log10(c.cen) - 2, lx1 = Math.log10(c.cen) + 2; // same log range as the slider
+  const X = function (w) { return x0 + (Math.log10(w) - lx0) / (lx1 - lx0) * (x1 - x0); };
+  function subplot(yTop, yBot, vals, zeroLabel, title, fmtV) {
+    ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1;
+    ctx.strokeRect(x0, yTop, x1 - x0, yBot - yTop);
+    let lo = Math.min(0, Math.min.apply(null, vals)), hi = Math.max(0, Math.max.apply(null, vals));
+    if (vals.length === 0) { lo = -1; hi = 1; }
+    const pad = Math.max((hi - lo) * 0.15, 1);
+    lo -= pad; hi += pad;
+    const Y = function (v) { return yBot - (v - lo) / (hi - lo) * (yBot - yTop); };
+    // zero line
+    ctx.strokeStyle = "#bbb";
+    ctx.beginPath(); ctx.moveTo(x0, Y(0)); ctx.lineTo(x1, Y(0)); ctx.stroke();
+    ctx.fillStyle = "#888"; ctx.font = "11px sans-serif";
+    ctx.fillText(zeroLabel, 6, Y(0) + 4);
+    ctx.fillText(fmtV(hi), 6, yTop + 10);
+    ctx.fillText(fmtV(lo), 6, yBot - 2);
+    ctx.fillStyle = "#333"; ctx.font = "bold 12px sans-serif";
+    ctx.fillText(title, x0 + 6, yTop + 16);
+    // decade ticks
+    ctx.font = "11px sans-serif"; ctx.fillStyle = "#888";
+    for (let d = Math.ceil(lx0); d <= Math.floor(lx1); d++) {
+      const wv = Math.pow(10, d), px = X(wv);
+      ctx.strokeStyle = "#eee";
+      ctx.beginPath(); ctx.moveTo(px, yTop); ctx.lineTo(px, yBot); ctx.stroke();
+      ctx.fillText(String(wv), px - 8, yBot + 14);
+    }
+    return Y;
+  }
+  const dbs = pts.map(function (q) { return 20 * Math.log10(q.mag); });
+  const degs = pts.map(function (q) { return q.phase * 180 / Math.PI; });
+  const Yg = subplot(12, 138, dbs, "0 dB", "ゲイン [dB]", function (v) { return v.toFixed(0) + ""; });
+  const Yp = subplot(168, 294, degs, "0°", "位相 [°]", function (v) { return v.toFixed(0) + ""; });
+  if (pts.length === 0) {
+    ctx.fillStyle = "#999"; ctx.font = "13px sans-serif";
+    ctx.fillText("まだ点がありません。今の設定で「この点を記録」を押してください。", x0 + 10, 80);
+    return;
+  }
+  function plotLine(vals, Y) {
+    ctx.strokeStyle = "#2255aa"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    pts.forEach(function (q, i) { const px = X(q.w), py = Y(vals[i]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+    ctx.stroke();
+    pts.forEach(function (q, i) { dot(ctx, X(q.w), Y(vals[i]), "#cc6600"); });
+  }
+  plotLine(dbs, Yg);
+  plotLine(degs, Yp);
+  // current operating point marker (not yet recorded)
+  ctx.fillStyle = "#999"; ctx.font = "11px sans-serif";
+  ctx.fillText("○＝今の設定点（未記録）", x1 - 150, 12 + 8);
+  [ [20 * Math.log10(c.mag), Yg], [c.phase * 180 / Math.PI, Yp] ].forEach(function (pr) {
+    ctx.strokeStyle = "#999"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(X(c.w), pr[1](pr[0]), 5, 0, 2 * Math.PI); ctx.stroke();
+  });
+}
+
+// ---------- events ----------
+$("tab-smd").addEventListener("click", function () { selectModel("smd"); });
+$("tab-acc").addEventListener("click", function () { selectModel("acc"); });
+$("tab-coil").addEventListener("click", function () { selectModel("coil"); });
+$("tab-cap").addEventListener("click", function () { selectModel("cap"); });
+$("recordBtn").addEventListener("click", function () {
+  const c = current();
+  bodePoints.push({ model: modelKey, w: c.w, p: c.p, mag: c.mag, phase: c.phase });
+  update();
+});
+$("clearBodeBtn").addEventListener("click", function () {
+  bodePoints = [];
+  update();
+});
+omegaEl.addEventListener("input", function () {
+  const cen = eigenCenter();
+  omegaVal = cen * Math.pow(10, (parseFloat(omegaEl.value) - 100) / 50);
+  update();
+});
+paramEl.addEventListener("input", function () {
+  // the centre moves with the parameter: keep the same absolute omega where
+  // possible, clamping into the new range
+  const cen = eigenCenter();
+  omegaVal = Math.min(cen * 100, Math.max(cen / 100, omegaVal));
+  syncOmegaSlider();
+  update();
+});
+$("eigenBtn").addEventListener("click", function () {
+  omegaVal = eigenCenter();
+  syncOmegaSlider();
+  update();
+});
+$("playBtn").addEventListener("click", function () {
+  playing = !playing;
+  $("playBtn").textContent = playing ? "⏸ 止める" : "▶ 回す";
+  lastTs = null;
+});
+
+function frame(ts) {
+  if (playing) {
+    if (lastTs === null) lastTs = ts;
+    const dt = Math.min((ts - lastTs) / 1000, 0.05);
+    lastTs = ts;
+    t += dt;
+    draw(current());
+  }
+  requestAnimationFrame(frame);
+}
+
+selectModel("smd");
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
