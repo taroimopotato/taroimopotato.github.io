@@ -116,9 +116,9 @@ const MODELS = {
   acc: {
     name: "アキュムレータ",
     params: [
-      { key: "R", label: "配管抵抗 R（主管）", min: 0.2, max: 5, step: 0.1, def: 1 },
-      { key: "R2", label: "配管抵抗 R₂（アキュムレータ側）", min: 0, max: 5, step: 0.1, def: 0 },
-      { key: "C", label: "容量 C（アキュムレータ）", min: 0.05, max: 2, step: 0.05, def: 0.5 }
+      { key: "R", label: "配管抵抗 R（主管）[Pa·s/m³]", min: 0.2, max: 5, step: 0.1, def: 1 },
+      { key: "R2", label: "配管抵抗 R₂（アキュムレータ側）[Pa·s/m³]", min: 0, max: 5, step: 0.1, def: 0 },
+      { key: "C", label: "容量 C（アキュムレータ）[m³/Pa]", min: 0.05, max: 2, step: 0.05, def: 0.5 }
     ],
     eigen: function (P) { const v = 1 / (P.C * (P.R + P.R2)); return { value: v, label: "固有値 ωp=1/(C(R+R₂))=" + fmt(v) + "（極）にセット" }; },
     desc: "圧力の伝達関数 H = (1 + iωCR₂) / (1 + iωC(R+R₂))。主管の配管抵抗 R、分岐した後のアキュムレータ側の配管抵抗 R₂、アキュムレータの容量 C がパラメータ。" +
