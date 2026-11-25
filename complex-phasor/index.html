@@ -116,26 +116,29 @@ const MODELS = {
   acc: {
     name: "アキュムレータ",
     params: [
-      { key: "R", label: "配管抵抗 R（主管）[Pa·s/m³]", min: 0.2, max: 5, step: 0.1, def: 1 },
-      { key: "R2", label: "配管抵抗 R₂（アキュムレータ側）[Pa·s/m³]", min: 0, max: 5, step: 0.1, def: 0 },
-      { key: "C", label: "容量 C（アキュムレータ）[m³/Pa]", min: 0.05, max: 2, step: 0.05, def: 0.5 }
+      { key: "R", label: "配管抵抗 R（主管）[Pa/LPM]", min: 0.2, max: 5, step: 0.1, def: 1 },
+      { key: "R2", label: "配管抵抗 R₂（アキュムレータ側）[Pa/LPM]", min: 0, max: 5, step: 0.1, def: 0 },
+      { key: "C", label: "容量 C（アキュムレータ）[L/Pa]", min: 0.001, max: 0.02, step: 0.0005, def: 0.008333 }
     ],
-    eigen: function (P) { const v = 1 / (P.C * (P.R + P.R2)); return { value: v, label: "固有値 ωp=1/(C(R+R₂))=" + fmt(v) + "（極）にセット" }; },
+    eigen: function (P) { const v = 1 / (60 * P.C * (P.R + P.R2)); return { value: v, label: "固有値 ωp=1/(60·C(R+R₂))=" + fmt(v) + "（極）にセット" }; },
     desc: "圧力の伝達関数 H = (1 + iωCR₂) / (1 + iωC(R+R₂))。主管の配管抵抗 R、分岐した後のアキュムレータ側の配管抵抗 R₂、アキュムレータの容量 C がパラメータ。" +
-      "R₂=0 のとき従来の 1/(1+iωτ)（τ=RC）に戻る。R₂ があると、高周波でも |H| は R₂/(R+R₂) までしか下がらない（枝管の抵抗が吸収を邪魔する）。",
+      "単位は R が Pa/LPM（流量1 LPMあたりの圧力）、C が L/Pa で、時定数は τ = 60·RC [s]（LPM→m³/s の換算で60が付く）。" +
+      "R₂=0 のとき従来の 1/(1+iωτ) に戻る。R₂ があると、高周波でも |H| は R₂/(R+R₂) までしか下がらない（枝管の抵抗が吸収を邪魔する）。",
     foot: "高い周波数ほど |H| が小さくなる＝バースト波の角（高周波成分）が取れて鈍る理由。" +
       "枝管抵抗 R₂ があると、位相の遅れは中間の周波数で最大になり、高周波では0に戻っていく（進み遅れ補償の形）。" +
       "時刻歴グラフは入出力とも圧力（同じ量）なので、実際の振幅比で描いてある（出力の波の高さ＝入力×|H|）。",
     calc: function (w, P) {
-      const a = w * P.C;
-      const den = 1 + a * a * (P.R + P.R2) * (P.R + P.R2);
-      const Hre = (1 + a * a * P.R2 * (P.R + P.R2)) / den;
-      const Him = -a * P.R / den;
-      const wp = 1 / (P.C * (P.R + P.R2));
-      const wz = P.R2 > 0 ? 1 / (P.C * P.R2) : Infinity;
+      // Convert display units to SI inside: R [Pa/LPM] -> x60000 [Pa·s/m³], C [L/Pa] -> /1000 [m³/Pa]
+      const R = P.R * 60000, R2 = P.R2 * 60000, C = P.C / 1000;
+      const a = w * C;
+      const den = 1 + a * a * (R + R2) * (R + R2);
+      const Hre = (1 + a * a * R2 * (R + R2)) / den;
+      const Him = -a * R / den;
+      const wp = 1 / (C * (R + R2));
+      const wz = R2 > 0 ? 1 / (C * R2) : Infinity;
       return { Hre: Hre, Him: Him, inAmp: 1, inUnit: "（規格化）", outUnit: "（規格化）",
         inLabel: "入口圧力 p₁", outLabel: "出口圧力 p₂", traceMode: "pair",
-        extra: "極 ωp = 1/(C(R+R₂)) = " + fmt(wp) + " rad/s　／　零点 ωz = 1/(CR₂) = " +
+        extra: "τ = 60·RC = " + fmt(60 * P.R * P.C) + " s（R₂=0 のとき）　／　極 ωp = " + fmt(wp) + " rad/s　／　零点 ωz = " +
           (isFinite(wz) ? fmt(wz) : "∞") + " rad/s　／　高周波の底 |H| → R₂/(R+R₂) = " + fmt(P.R2 / (P.R + P.R2)) };
     }
   },
