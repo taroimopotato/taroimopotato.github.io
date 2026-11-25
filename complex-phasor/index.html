@@ -22,6 +22,9 @@
   .note { font-size: 13px; color: #555; }
   .model-desc { font-size: 14px; background: #eef4ff; border-radius: 6px; padding: 10px 12px; }
   button.play { padding: 6px 16px; font-size: 14px; margin: 6px 0; }
+  button.casebtn { border: 1px solid #999; background: #fff; border-radius: 6px; cursor: pointer; }
+  button.casebtn.active { background: #2255aa; color: #fff; border-color: #2255aa; }
+  button.casebtn.b.active { background: #cc3333; border-color: #cc3333; }
 </style>
 </head>
 <body>
@@ -45,9 +48,12 @@
   <input type="range" id="omega" min="0.5" max="30" step="0.1" value="10">
   <output id="omegaOut"></output>
   <button id="eigenBtn" style="margin-left:8px; padding:4px 10px; font-size:13px;">固有値にセット</button></div>
-<div class="ctl"><label id="paramLabel">減衰係数 c</label>
-  <input type="range" id="param" min="0.5" max="20" step="0.5" value="4">
-  <output id="paramOut"></output></div>
+<div class="ctl">編集中のケース：
+  <button id="caseA" class="play casebtn">ケースA</button>
+  <button id="caseB" class="play casebtn b">ケースB</button>
+  <span class="note">— パラメータはケースごとに別々に保存され、ボード線図で重ねて比べられます</span>
+</div>
+<div id="paramCtrls"></div>
 <button class="play" id="playBtn">⏸ 止める</button>
 
 <h3>フェーザ（回る矢印） <span class="note">— 青＝入力、橙＝出力。点線は実軸への影＝その瞬間に測れる値。<span id="phasorNote"></span></span></h3>
@@ -67,6 +73,7 @@
 <h3>ボード線図（自分で記録した点）</h3>
 <div class="ctl">
   <button class="play" id="recordBtn">● この点を記録（ω・ゲイン・位相）</button>
+  <button class="play" id="sweepBtn">スイープ曲線：表示中</button>
   <button class="play" id="clearBodeBtn">記録を全消去</button>
   <span class="note" id="bodeInfo"></span>
 </div>
@@ -81,62 +88,67 @@
 const MODELS = {
   smd: {
     name: "バネ・マス・ダンパ",
-    omegaMin: 0.5, omegaMax: 30, omegaStep: 0.1, omegaDef: 10,
-    paramLabel: "減衰係数 c [N·s/m]", paramMin: 0.5, paramMax: 20, paramStep: 0.5, paramDef: 4,
-    eigen: function (p) { return { value: 10, label: "固有値 ω₀=10（共振）にセット" }; },
+    params: [
+      { key: "m", label: "質量 m [kg]", min: 0.2, max: 5, step: 0.1, def: 1 },
+      { key: "k", label: "ばね定数 k [N/m]", min: 10, max: 500, step: 5, def: 100 },
+      { key: "c", label: "減衰係数 c [N·s/m]", min: 0.5, max: 20, step: 0.5, def: 4 }
+    ],
+    eigen: function (P) { const v = Math.sqrt(P.k / P.m); return { value: v, label: "固有値 ω₀=√(k/m)=" + fmt(v) + "（共振）にセット" }; },
     desc: "強制変位のモデル。加振点を y = Y cos ωt（Y=0.01m）と強制的に動かすと、バネとダンパ（並列）を通してマスが x だけ動く。" +
-      "m=1kg, k=100N/m。変位の伝達率 X/Y = (k + iωc) / (k − mω² + iωc)。入力は加振点の変位と力、出力はマスの変位と、バネ・ダンパからマスに伝わる力。",
+      "変位の伝達率 X/Y = (k + iωc) / (k − mω² + iωc)。入力は加振点の変位と力、出力はマスの変位と、バネ・ダンパからマスに伝わる力。",
     foot: "変位のグラフ：入力＝加振点変位 y、出力＝マス変位 x（同じ単位なので実際の振幅比で描いてある）。" +
       "力のグラフ：入力＝加振点の力、出力＝バネ・ダンパからマスに伝わる力。バネ・ダンパは質量のない要素なので、この2つの力は大きさも位相も一致して重なる（力はそのまま伝わり、変わるのは変位の方）。",
-    calc: function (w, c) {
-      const m = 1, k = 100, Y = 0.01;
-      // H = X/Y = (k + i·wc) / ((k - m w^2) + i·wc)
+    calc: function (w, P) {
+      const m = P.m, k = P.k, c = P.c, Y = 0.01;
       const nr = k, ni = w * c;
       const dr = k - m * w * w, di = w * c;
       const den = dr * dr + di * di;
       const Hre = (nr * dr + ni * di) / den, Him = (ni * dr - nr * di) / den;
-      // Force transmitted to the mass = m * x'' -> phasor -m w^2 * X = -m w^2 * H * Y
       const Fre = -m * w * w * Hre * Y, Fim = -m * w * w * Him * Y;
       const fAmp = Math.hypot(Fre, Fim), fPhase = Math.atan2(Fim, Fre);
       return { Hre: Hre, Him: Him, inAmp: Y, inUnit: "m", outUnit: "m",
         inLabel: "加振点変位 y", outLabel: "マス変位 x",
         traceMode: "smd", fAmp: fAmp, fPhase: fPhase,
-        extra: "ω₀ = √(k/m) = 10 rad/s（共振）　／　伝わる力の振幅 " + fAmp.toFixed(3) + " N、位相 " +
+        extra: "ω₀ = √(k/m) = " + fmt(Math.sqrt(k / m)) + " rad/s（共振）　／　伝わる力の振幅 " + fAmp.toFixed(3) + " N、位相 " +
           (fPhase * 180 / Math.PI).toFixed(1) + "°（加振点の力とマスに伝わる力は一致）" };
     }
   },
   acc: {
     name: "アキュムレータ",
-    omegaMin: 0.1, omegaMax: 20, omegaStep: 0.1, omegaDef: 2,
-    paramLabel: "時定数 τ = RC [s]", paramMin: 0.1, paramMax: 2, paramStep: 0.05, paramDef: 0.5,
-    eigen: function (tau) { return { value: 1 / tau, label: "固有値 ωc=1/τ=" + (1 / tau).toFixed(2) + "（カットオフ）にセット" }; },
-    desc: "圧力の伝達関数 H = 1/(1 + iωτ)。配管抵抗 R とアキュムレータの容量 C で決まる時定数 τ が、" +
+    params: [
+      { key: "R", label: "配管抵抗 R", min: 0.2, max: 5, step: 0.1, def: 1 },
+      { key: "C", label: "容量 C（アキュムレータ）", min: 0.05, max: 2, step: 0.05, def: 0.5 }
+    ],
+    eigen: function (P) { const v = 1 / (P.R * P.C); return { value: v, label: "固有値 ωc=1/(RC)=" + fmt(v) + "（カットオフ）にセット" }; },
+    desc: "圧力の伝達関数 H = 1/(1 + iωτ)、τ = RC。配管抵抗 R とアキュムレータの容量 C で決まる時定数 τ が、" +
       "どの周波数から鈍り始めるかを決める。ωτ=1 で振幅 1/√2、遅れちょうど45°。",
     foot: "高い周波数ほど |H| が小さくなる＝バースト波の角（高周波成分）が取れて鈍る理由。" +
       "実部＝遅れずに通る分、虚部＝1/4周期遅れて出てくる分。" +
       "時刻歴グラフは入出力とも圧力（同じ量）なので、実際の振幅比で描いてある（出力の波の高さ＝入力×|H|）。",
-    calc: function (w, tau) {
+    calc: function (w, P) {
+      const tau = P.R * P.C;
       const den = 1 + (w * tau) * (w * tau);
       return { Hre: 1 / den, Him: -w * tau / den, inAmp: 1, inUnit: "（規格化）", outUnit: "（規格化）",
         inLabel: "入口圧力 p₁", outLabel: "出口圧力 p₂", traceMode: "pair",
-        extra: "カットオフ角周波数 ωc = 1/τ = " + (1 / tau).toFixed(2) + " rad/s" };
+        extra: "τ = RC = " + fmt(tau) + " s　／　カットオフ角周波数 ωc = 1/τ = " + fmt(1 / tau) + " rad/s" };
     }
   },
   coil: {
     name: "コイル",
-    omegaMin: 1, omegaMax: 500, omegaStep: 1, omegaDef: 100,
-    paramLabel: "インダクタンス L [H]", paramMin: 0.02, paramMax: 0.5, paramStep: 0.01, paramDef: 0.1,
-    eigen: function (L) { return { value: 10 / L, label: "固有値 ω=R/L=" + (10 / L).toFixed(0) + "（ωL=R で -45°）にセット" }; },
-    desc: "電圧 V₀cos ωt を R=10Ω とコイル L の直列回路に入れると、電流 I = V₀/(R + iωL)。" +
+    params: [
+      { key: "R", label: "抵抗 R [Ω]", min: 1, max: 50, step: 1, def: 10 },
+      { key: "L", label: "インダクタンス L [H]", min: 0.02, max: 0.5, step: 0.01, def: 0.1 }
+    ],
+    eigen: function (P) { const v = P.R / P.L; return { value: v, label: "固有値 ω=R/L=" + fmt(v) + "（ωL=R で -45°）にセット" }; },
+    desc: "電圧 V₀cos ωt を抵抗 R とコイル L の直列回路に入れると、電流 I = V₀/(R + iωL)。" +
       "インピーダンス Z = R + iωL の実部 R は熱になる分、虚部 ωL は磁界に溜めて返す分。",
     foot: "電流は電圧より遅れる。遅れ角は atan(ωL/R)。ωL ≫ R ではほぼ90°遅れ＝コイルがエネルギーを蓄えて返すだけになる。" +
       "電圧のグラフ：入力＝電源電圧、出力＝コイル両端の電圧（同じ単位なので実際の振幅比で描画）。" +
       "電流のグラフ：直列回路なので電源から出る電流とコイルを流れる電流は同じで、2本は重なる。",
-    calc: function (w, L) {
-      const R = 10, V0 = 10;
+    calc: function (w, P) {
+      const R = P.R, L = P.L, V0 = 10;
       const den = R * R + (w * L) * (w * L);
-      const Hre = R / den, Him = -w * L / den; // 1/(R + iωL)
-      // Coil voltage phasor V_L = i·wL · I, with I = V0 * (Hre + i·Him)
+      const Hre = R / den, Him = -w * L / den;
       const vLre = -w * L * V0 * Him, vLim = w * L * V0 * Hre;
       const vLAmp = Math.hypot(vLre, vLim), vLPhase = Math.atan2(vLim, vLre);
       return { Hre: Hre, Him: Him, inAmp: V0, inUnit: "V", outUnit: "A",
@@ -148,20 +160,21 @@ const MODELS = {
   },
   cap: {
     name: "キャパシタ",
-    omegaMin: 0.5, omegaMax: 200, omegaStep: 0.5, omegaDef: 10,
-    paramLabel: "静電容量 C [F]", paramMin: 0.001, paramMax: 0.05, paramStep: 0.001, paramDef: 0.01,
-    eigen: function (C) { return { value: 1 / (10 * C), label: "固有値 ωc=1/(RC)=" + (1 / (10 * C)).toFixed(1) + "（電流が45°進む点）にセット" }; },
-    desc: "電圧 V₀cos ωt を R=10Ω とコンデンサ C の直列回路に入れると、電流 I = V₀·(iωC)/(1 + iωCR)。" +
+    params: [
+      { key: "R", label: "抵抗 R [Ω]", min: 1, max: 50, step: 1, def: 10 },
+      { key: "C", label: "静電容量 C [F]", min: 0.001, max: 0.05, step: 0.001, def: 0.01 }
+    ],
+    eigen: function (P) { const v = 1 / (P.R * P.C); return { value: v, label: "固有値 ωc=1/(RC)=" + fmt(v) + "（電流が45°進む点）にセット" }; },
+    desc: "電圧 V₀cos ωt を抵抗 R とコンデンサ C の直列回路に入れると、電流 I = V₀·(iωC)/(1 + iωCR)。" +
       "コンデンサのインピーダンス 1/(iωC) は実部がゼロ＝熱にならず、蓄えて返すだけ。電流は電圧より進む（コイルと逆）。",
     foot: "電流は電圧より進む。進み角は最大90°（ω→0 でコンデンサが支配的）から、ω→∞ で0°（抵抗だけが見える）に近づく。" +
       "電圧のグラフ：入力＝電源電圧、出力＝コンデンサ両端の電圧（同じ単位なので実際の振幅比で描画）。" +
       "電流のグラフ：直列回路なので電源から出る電流とコンデンサを流れる電流は同じで、2本は重なる。",
-    calc: function (w, C) {
-      const R = 10, V0 = 10;
-      const a = w * C * R; // ωCR
+    calc: function (w, P) {
+      const R = P.R, C = P.C, V0 = 10;
+      const a = w * C * R;
       const den = R * (1 + a * a);
-      const Hre = a * a / den, Him = a / den; // I/V0 = iωC/(1 + iωCR)
-      // Capacitor voltage phasor V_C = I / (i·wC) = -i·I/(wC), I = V0*(Hre + i·Him)
+      const Hre = a * a / den, Him = a / den;
       const vCre = V0 * Him / (w * C), vCim = -V0 * Hre / (w * C);
       const vCAmp = Math.hypot(vCre, vCim), vCPhase = Math.atan2(vCim, vCre);
       return { Hre: Hre, Him: Him, inAmp: V0, inUnit: "V", outUnit: "A",
@@ -177,9 +190,25 @@ let modelKey = "smd";
 let playing = true;
 let t = 0, lastTs = null;
 let omegaVal = 10; // actual angular frequency; the slider itself is a log-scale position
+let activeCase = "A"; // "A" or "B": parameter sets are kept per case
+let sweepOn = true;
 
 const $ = id => document.getElementById(id);
-const omegaEl = $("omega"), paramEl = $("param");
+const omegaEl = $("omega");
+
+// Parameter values per model and per case, lazily initialised from defaults.
+const caseParams = {};
+function paramsOf(key, cs) {
+  if (!caseParams[key]) {
+    const d = {};
+    MODELS[key].params.forEach(function (pd) { d[pd.key] = pd.def; });
+    caseParams[key] = { A: Object.assign({}, d), B: Object.assign({}, d) };
+  }
+  return caseParams[key][cs || activeCase];
+}
+function paramsEqual(a, b) {
+  return Object.keys(b).every(function (k) { return a[k] === b[k]; });
+}
 
 function fmt(x, d) { d = (d === undefined) ? 3 : d; return Number(x).toPrecision(d); }
 
@@ -188,7 +217,7 @@ function fmt(x, d) { d = (d === undefined) ? 3 : d; return Number(x).toPrecision
 // Slider position 0..200 maps to centre * 10^((pos-100)/50).
 function eigenCenter() {
   const m = MODELS[modelKey];
-  return m.eigen ? m.eigen(parseFloat(paramEl.value)).value : 10;
+  return m.eigen ? m.eigen(paramsOf(modelKey)).value : 10;
 }
 function syncOmegaSlider() {
   const cen = eigenCenter();
@@ -198,12 +227,48 @@ function syncOmegaSlider() {
 
 function current() {
   const w = omegaVal;
-  const p = parseFloat(paramEl.value);
+  const P = paramsOf(modelKey);
   const m = MODELS[modelKey];
-  const r = m.calc(w, p);
+  const r = m.calc(w, P);
   const mag = Math.hypot(r.Hre, r.Him);
   const phase = Math.atan2(r.Him, r.Hre); // rad, negative = lag
-  return { w: w, p: p, m: m, r: r, mag: mag, phase: phase, cen: eigenCenter() };
+  return { w: w, P: P, m: m, r: r, mag: mag, phase: phase, cen: eigenCenter() };
+}
+
+// Build one slider per parameter of the current model, bound to the active case.
+function buildParamCtrls() {
+  const wrap = $("paramCtrls");
+  wrap.innerHTML = "";
+  const P = paramsOf(modelKey);
+  MODELS[modelKey].params.forEach(function (pd) {
+    const div = document.createElement("div");
+    div.className = "ctl";
+    const lab = document.createElement("label");
+    lab.textContent = pd.label;
+    const inp = document.createElement("input");
+    inp.type = "range"; inp.min = pd.min; inp.max = pd.max; inp.step = pd.step; inp.value = P[pd.key];
+    const out = document.createElement("output");
+    out.textContent = P[pd.key];
+    inp.addEventListener("input", function () {
+      paramsOf(modelKey)[pd.key] = parseFloat(inp.value);
+      out.textContent = inp.value;
+      const cen = eigenCenter();
+      omegaVal = Math.min(cen * 100, Math.max(cen / 100, omegaVal));
+      syncOmegaSlider();
+      update();
+    });
+    div.appendChild(lab); div.appendChild(inp); div.appendChild(out);
+    wrap.appendChild(div);
+  });
+}
+
+function selectCase(cs) {
+  activeCase = cs;
+  buildParamCtrls();
+  const cen = eigenCenter();
+  omegaVal = Math.min(cen * 100, Math.max(cen / 100, omegaVal));
+  syncOmegaSlider();
+  update();
 }
 
 function selectModel(key) {
@@ -212,10 +277,9 @@ function selectModel(key) {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
   $("tab-" + key).classList.add("active");
   omegaEl.min = 0; omegaEl.max = 200; omegaEl.step = 1; // log-position slider
-  paramEl.min = m.paramMin; paramEl.max = m.paramMax; paramEl.step = m.paramStep; paramEl.value = m.paramDef;
+  buildParamCtrls();
   omegaVal = eigenCenter(); // start at the eigen value (slider centre)
   syncOmegaSlider();
-  $("paramLabel").textContent = m.paramLabel;
   $("modelDesc").textContent = m.desc;
   $("footNote").textContent = m.foot;
   t = 0;
@@ -227,7 +291,9 @@ function update() {
   const f = c.w / (2 * Math.PI);
   $("omegaOut").textContent = fmt(c.w) + " rad/s（f = " + fmt(f) + " Hz）　範囲：" +
     fmt(c.cen / 100) + " 〜 " + fmt(c.cen * 100) + "（中心＝固有値 " + fmt(c.cen) + "、対数）";
-  if (c.m.eigen) $("eigenBtn").textContent = c.m.eigen(c.p).label;
+  if (c.m.eigen) $("eigenBtn").textContent = c.m.eigen(c.P).label;
+  $("caseA").classList.toggle("active", activeCase === "A");
+  $("caseB").classList.toggle("active", activeCase === "B");
   if (c.r.traceMode === "smd") {
     $("traceInName").textContent = "変位のグラフ（入力＝加振点変位／出力＝マス変位）";
     $("traceOutName").textContent = "力のグラフ（入力＝加振点の力／出力＝バネ・ダンパからマスに伝わる力）";
@@ -241,7 +307,6 @@ function update() {
     $("traceInName").textContent = c.r.inLabel + " のグラフ";
     $("traceOutName").textContent = c.r.outLabel + " のグラフ";
   }
-  $("paramOut").textContent = c.p + (modelKey === "smd" ? " N·s/m" : modelKey === "acc" ? " s" : modelKey === "cap" ? " F" : " H");
   $("phasorNote").textContent = (c.r.inUnit === c.r.outUnit) ?
     "矢印の長さの比がそのまま |H|（出力÷入力）。大きい方の矢印を基準に描いてある" :
     "電圧と電流では単位が違うため、出力矢印の長さは範囲内の最大 |H| で規格化（絶対値は下の数値で）";
@@ -298,13 +363,13 @@ function drawDiagram(c) {
   if (!cv) return;
   const ctx = cv.getContext("2d");
   ctx.clearRect(0, 0, cv.width, cv.height);
-  if (modelKey === "smd") diagSmd(ctx);
+  if (modelKey === "smd") diagSmd(ctx, c);
   else if (modelKey === "acc") diagAcc(ctx);
   else if (modelKey === "coil") diagRL(ctx, false);
   else if (modelKey === "cap") diagRL(ctx, true);
 }
 
-function diagSmd(ctx) {
+function diagSmd(ctx, c) {
   // ground
   dLine(ctx, 36, 182, 604, 182, "#999", 1.5);
   for (let x = 44; x < 600; x += 18) dLine(ctx, x, 182, x - 7, 192, "#bbb", 1);
@@ -316,16 +381,16 @@ function diagSmd(ctx) {
   dText(ctx, "入力：加振点変位 y", 108, 67, "#2255aa", true);
   // spring (top) and damper (bottom) in parallel
   dSpring(ctx, 84, 272, 110);
-  dText(ctx, "バネ k", 150, 92, "#333");
+  dText(ctx, "バネ k=" + (c ? c.P.k : 100), 140, 92, "#333");
   dLine(ctx, 84, 152, 148, 152, "#333", 1.8);
   dRect(ctx, 148, 140, 56, 24, "#fff", "#333");
   dLine(ctx, 196, 141, 196, 163, "#333", 2.5);
   dLine(ctx, 204, 152, 272, 152, "#333", 1.8);
-  dText(ctx, "ダンパ c", 140, 178, "#333");
+  dText(ctx, "ダンパ c=" + (c ? c.P.c : 4), 132, 178, "#333");
   // mass
   dRect(ctx, 272, 96, 100, 86, "#ffe3c2", "#cc6600");
   dText(ctx, "マス", 312, 134, "#333", true, 15);
-  dText(ctx, "m = 1 kg", 296, 156, "#333");
+  dText(ctx, "m = " + (c ? c.P.m : 1) + " kg", 292, 156, "#333");
   // x output arrow
   dDoubleArrow(ctx, 276, 368, 62, "#cc6600");
   dText(ctx, "出力：マス変位 x", 376, 67, "#cc6600", true);
@@ -615,7 +680,7 @@ function drawPhasor(c) {
     const scanLo = c.cen / 100, scanHi = c.cen * 100;
     for (let i = 0; i <= 100; i++) {
       const w = scanLo * Math.pow(scanHi / scanLo, i / 100);
-      const rr = c.m.calc(w, c.p);
+      const rr = c.m.calc(w, c.P);
       maxMag = Math.max(maxMag, Math.hypot(rr.Hre, rr.Him));
     }
     const outRel = maxMag > 0 ? c.mag / maxMag : 0;
@@ -701,8 +766,9 @@ function drawHplane(c) {
   ctx.fillText("虚部 " + fmt(c.r.Him), 12, H - 10);
 }
 
-// ---------- Bode plot from manually recorded points ----------
-let bodePoints = []; // { model, w, p, mag, phase }
+// ---------- Bode plot: sweep curves for Case A / B + manually recorded points ----------
+let bodePoints = []; // { model, cs, w, P, mag, phase }
+const CASE_COLORS = { A: "#2255aa", B: "#cc3333" };
 
 function drawBode(c) {
   const cv = $("bode");
@@ -710,11 +776,18 @@ function drawBode(c) {
   const ctx = cv.getContext("2d");
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
-  const pts = bodePoints.filter(function (q) { return q.model === modelKey && q.p === c.p; })
-    .slice().sort(function (a, b) { return a.w - b.w; });
-  $("bodeInfo").textContent = "記録 全" + bodePoints.length + "点 ／ 現在の設定（" + c.m.name + "、パラメータ " + c.p + "）で表示 " + pts.length + "点";
+  function ptsFor(cs) {
+    const P = paramsOf(modelKey, cs);
+    return bodePoints.filter(function (q) {
+      return q.model === modelKey && q.cs === cs && paramsEqual(q.P, P);
+    }).slice().sort(function (a, b) { return a.w - b.w; });
+  }
+  const ptsA = ptsFor("A"), ptsB = ptsFor("B");
+  $("bodeInfo").textContent = "記録 全" + bodePoints.length + "点 ／ 表示中：ケースA " + ptsA.length + "点・ケースB " + ptsB.length +
+    "点（各ケースの今のパラメータと一致する記録のみ）";
   const list = bodePoints.map(function (q, i) {
-    return (i + 1) + ". " + MODELS[q.model].name + "　ω=" + fmt(q.w) + "　パラメータ=" + q.p +
+    const ps = MODELS[q.model].params.map(function (pd) { return pd.key + "=" + q.P[pd.key]; }).join(", ");
+    return (i + 1) + ". " + MODELS[q.model].name + "［ケース" + q.cs + "］　ω=" + fmt(q.w) + "　" + ps +
       "　→　|H|=" + fmt(q.mag) + "（" + (20 * Math.log10(q.mag)).toFixed(1) + " dB）、位相 " +
       (q.phase * 180 / Math.PI).toFixed(1) + "°";
   });
@@ -723,7 +796,23 @@ function drawBode(c) {
   const x0 = 56, x1 = W - 16;
   const lx0 = Math.log10(c.cen) - 2, lx1 = Math.log10(c.cen) + 2; // same log range as the slider
   const X = function (w) { return x0 + (Math.log10(w) - lx0) / (lx1 - lx0) * (x1 - x0); };
-  function subplot(yTop, yBot, vals, zeroLabel, title, fmtV) {
+  function sweepVal(w, P, kind) {
+    const rr = c.m.calc(w, P);
+    const mg = Math.hypot(rr.Hre, rr.Him);
+    return kind === "db" ? 20 * Math.log10(mg) : Math.atan2(rr.Him, rr.Hre) * 180 / Math.PI;
+  }
+  const allDb = [], allDeg = [];
+  if (sweepOn) {
+    ["A", "B"].forEach(function (cs) {
+      const P = paramsOf(modelKey, cs);
+      for (let i = 0; i <= 60; i++) {
+        const w = Math.pow(10, lx0 + (lx1 - lx0) * i / 60);
+        allDb.push(sweepVal(w, P, "db")); allDeg.push(sweepVal(w, P, "deg"));
+      }
+    });
+  }
+  ptsA.concat(ptsB).forEach(function (q) { allDb.push(20 * Math.log10(q.mag)); allDeg.push(q.phase * 180 / Math.PI); });
+  function subplot(yTop, yBot, vals, zeroLabel, title) {
     ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1;
     ctx.strokeRect(x0, yTop, x1 - x0, yBot - yTop);
     let lo = Math.min(0, Math.min.apply(null, vals)), hi = Math.max(0, Math.max.apply(null, vals));
@@ -731,16 +820,14 @@ function drawBode(c) {
     const pad = Math.max((hi - lo) * 0.15, 1);
     lo -= pad; hi += pad;
     const Y = function (v) { return yBot - (v - lo) / (hi - lo) * (yBot - yTop); };
-    // zero line
     ctx.strokeStyle = "#bbb";
     ctx.beginPath(); ctx.moveTo(x0, Y(0)); ctx.lineTo(x1, Y(0)); ctx.stroke();
     ctx.fillStyle = "#888"; ctx.font = "11px sans-serif";
     ctx.fillText(zeroLabel, 6, Y(0) + 4);
-    ctx.fillText(fmtV(hi), 6, yTop + 10);
-    ctx.fillText(fmtV(lo), 6, yBot - 2);
+    ctx.fillText(hi.toFixed(0), 6, yTop + 10);
+    ctx.fillText(lo.toFixed(0), 6, yBot - 2);
     ctx.fillStyle = "#333"; ctx.font = "bold 12px sans-serif";
     ctx.fillText(title, x0 + 6, yTop + 16);
-    // decade ticks
     ctx.font = "11px sans-serif"; ctx.fillStyle = "#888";
     for (let d = Math.ceil(lx0); d <= Math.floor(lx1); d++) {
       const wv = Math.pow(10, d), px = X(wv);
@@ -750,33 +837,46 @@ function drawBode(c) {
     }
     return Y;
   }
-  const dbs = pts.map(function (q) { return 20 * Math.log10(q.mag); });
-  const degs = pts.map(function (q) { return q.phase * 180 / Math.PI; });
-  const Yg = subplot(12, 138, dbs, "0 dB", "ゲイン [dB]", function (v) { return v.toFixed(0) + ""; });
-  const Yp = subplot(168, 294, degs, "0°", "位相 [°]", function (v) { return v.toFixed(0) + ""; });
-  if (pts.length === 0) {
-    ctx.fillStyle = "#999"; ctx.font = "13px sans-serif";
-    ctx.fillText("まだ点がありません。今の設定で「この点を記録」を押してください。", x0 + 10, 80);
-    return;
-  }
-  function plotLine(vals, Y) {
-    ctx.strokeStyle = "#2255aa"; ctx.lineWidth = 1.5;
+  const Yg = subplot(12, 138, allDb, "0 dB", "ゲイン [dB]");
+  const Yp = subplot(168, 294, allDeg, "0°", "位相 [°]");
+  // legend
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillStyle = CASE_COLORS.A; ctx.fillText("— ケースA", x1 - 150, 26);
+  ctx.fillStyle = CASE_COLORS.B; ctx.fillText("— ケースB", x1 - 78, 26);
+  function plotCurve(cs, kind, Y) {
+    if (!sweepOn) return;
+    const P = paramsOf(modelKey, cs);
+    ctx.strokeStyle = CASE_COLORS[cs]; ctx.lineWidth = 1.5;
     ctx.beginPath();
-    pts.forEach(function (q, i) { const px = X(q.w), py = Y(vals[i]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+    for (let i = 0; i <= 120; i++) {
+      const w = Math.pow(10, lx0 + (lx1 - lx0) * i / 120);
+      const px = X(w), py = Y(sweepVal(w, P, kind));
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
     ctx.stroke();
-    pts.forEach(function (q, i) { dot(ctx, X(q.w), Y(vals[i]), "#cc6600"); });
   }
-  plotLine(dbs, Yg);
-  plotLine(degs, Yp);
+  function plotPts(pts, cs, getV, Y) {
+    if (!pts.length) return;
+    ctx.strokeStyle = CASE_COLORS[cs]; ctx.lineWidth = 1;
+    ctx.beginPath();
+    pts.forEach(function (q, i) { const px = X(q.w), py = Y(getV(q)); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+    ctx.stroke();
+    pts.forEach(function (q) { dot(ctx, X(q.w), Y(getV(q)), CASE_COLORS[cs]); });
+  }
+  plotCurve("A", "db", Yg); plotCurve("B", "db", Yg);
+  plotCurve("A", "deg", Yp); plotCurve("B", "deg", Yp);
+  const getDb = function (q) { return 20 * Math.log10(q.mag); };
+  const getDeg = function (q) { return q.phase * 180 / Math.PI; };
+  plotPts(ptsA, "A", getDb, Yg); plotPts(ptsB, "B", getDb, Yg);
+  plotPts(ptsA, "A", getDeg, Yp); plotPts(ptsB, "B", getDeg, Yp);
   // current operating point marker (not yet recorded)
   ctx.fillStyle = "#999"; ctx.font = "11px sans-serif";
-  ctx.fillText("○＝今の設定点（未記録）", x1 - 150, 12 + 8);
+  ctx.fillText("○＝今の設定点（未記録）", x1 - 150, 48);
   [ [20 * Math.log10(c.mag), Yg], [c.phase * 180 / Math.PI, Yp] ].forEach(function (pr) {
     ctx.strokeStyle = "#999"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(X(c.w), pr[1](pr[0]), 5, 0, 2 * Math.PI); ctx.stroke();
   });
 }
-
 // ---------- events ----------
 $("tab-smd").addEventListener("click", function () { selectModel("smd"); });
 $("tab-acc").addEventListener("click", function () { selectModel("acc"); });
@@ -784,24 +884,23 @@ $("tab-coil").addEventListener("click", function () { selectModel("coil"); });
 $("tab-cap").addEventListener("click", function () { selectModel("cap"); });
 $("recordBtn").addEventListener("click", function () {
   const c = current();
-  bodePoints.push({ model: modelKey, w: c.w, p: c.p, mag: c.mag, phase: c.phase });
+  bodePoints.push({ model: modelKey, cs: activeCase, w: c.w, P: Object.assign({}, c.P), mag: c.mag, phase: c.phase });
+  update();
+});
+$("sweepBtn").addEventListener("click", function () {
+  sweepOn = !sweepOn;
+  $("sweepBtn").textContent = sweepOn ? "スイープ曲線：表示中" : "スイープ曲線：非表示";
   update();
 });
 $("clearBodeBtn").addEventListener("click", function () {
   bodePoints = [];
   update();
 });
+$("caseA").addEventListener("click", function () { selectCase("A"); });
+$("caseB").addEventListener("click", function () { selectCase("B"); });
 omegaEl.addEventListener("input", function () {
   const cen = eigenCenter();
   omegaVal = cen * Math.pow(10, (parseFloat(omegaEl.value) - 100) / 50);
-  update();
-});
-paramEl.addEventListener("input", function () {
-  // the centre moves with the parameter: keep the same absolute omega where
-  // possible, clamping into the new range
-  const cen = eigenCenter();
-  omegaVal = Math.min(cen * 100, Math.max(cen / 100, omegaVal));
-  syncOmegaSlider();
   update();
 });
 $("eigenBtn").addEventListener("click", function () {
