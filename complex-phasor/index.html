@@ -50,7 +50,7 @@
   <output id="paramOut"></output></div>
 <button class="play" id="playBtn">⏸ 止める</button>
 
-<h3>フェーザ（回る矢印） <span class="note">— 青＝入力、橙＝出力。点線は実軸への影＝その瞬間に測れる値。出力矢印の長さはそのモデルの最大値で規格化（絶対値は下の数値で）</span></h3>
+<h3>フェーザ（回る矢印） <span class="note">— 青＝入力、橙＝出力。点線は実軸への影＝その瞬間に測れる値。<span id="phasorNote"></span></span></h3>
 <canvas id="phasor" width="640" height="340"></canvas>
 
 <h3><span id="traceInName">力 F のグラフ</span> <span class="note">— どちらのグラフにも入力（青）と出力（橙）の2本を表示。入出力が同じ物理量のモデル（バネマスの変位、アキュムレータの圧力）は実際の振幅比で描いてある。縦の線は今の時刻（フェーザの角度 θ=ωt と連動）</span></h3>
@@ -242,6 +242,9 @@ function update() {
     $("traceOutName").textContent = c.r.outLabel + " のグラフ";
   }
   $("paramOut").textContent = c.p + (modelKey === "smd" ? " N·s/m" : modelKey === "acc" ? " s" : modelKey === "cap" ? " F" : " H");
+  $("phasorNote").textContent = (c.r.inUnit === c.r.outUnit) ?
+    "矢印の長さの比がそのまま |H|（出力÷入力）。大きい方の矢印を基準に描いてある" :
+    "電圧と電流では単位が違うため、出力矢印の長さは範囲内の最大 |H| で規格化（絶対値は下の数値で）";
   const outAmp = c.r.inAmp * c.mag;
   $("nums").innerHTML =
     "<b>|H| = " + fmt(c.mag) + "　　arg H = " + (c.phase * 180 / Math.PI).toFixed(1) + "°（−は遅れ）</b><br>" +
@@ -597,16 +600,27 @@ function drawPhasor(c) {
   // amplitudes are in the numbers box below the canvases.
   const th = c.w * t; // rotating angle
   const inA = th, outA = th + c.phase;
-  const inL = R * 0.85;
-  let maxMag = 0;
-  const scanLo = c.cen / 100, scanHi = c.cen * 100;
-  for (let i = 0; i <= 100; i++) {
-    const w = scanLo * Math.pow(scanHi / scanLo, i / 100);
-    const rr = c.m.calc(w, c.p);
-    maxMag = Math.max(maxMag, Math.hypot(rr.Hre, rr.Him));
+  // Arrow lengths: when input and output are the same physical quantity
+  // (SMD displacement, accumulator pressure), draw the TRUE ratio:
+  // output length / input length = |H|, with the larger arrow at full size.
+  // When the units differ (V -> A), a shared scale is meaningless, so the
+  // output is normalised by the model's max |H| over the frequency range.
+  let inL, oL;
+  if (c.r.inUnit === c.r.outUnit) {
+    if (c.mag <= 1) { inL = R * 0.85; oL = R * 0.85 * c.mag; }
+    else { oL = R * 0.85; inL = R * 0.85 / c.mag; }
+  } else {
+    inL = R * 0.85;
+    let maxMag = 0;
+    const scanLo = c.cen / 100, scanHi = c.cen * 100;
+    for (let i = 0; i <= 100; i++) {
+      const w = scanLo * Math.pow(scanHi / scanLo, i / 100);
+      const rr = c.m.calc(w, c.p);
+      maxMag = Math.max(maxMag, Math.hypot(rr.Hre, rr.Him));
+    }
+    const outRel = maxMag > 0 ? c.mag / maxMag : 0;
+    oL = R * 0.85 * outRel;
   }
-  const outRel = maxMag > 0 ? c.mag / maxMag : 0;
-  const oL = R * 0.85 * outRel;
   drawArrow(ctx, cx, cy, cx + inL * Math.cos(inA), cy - inL * Math.sin(inA), "#2255aa", 3);
   drawArrow(ctx, cx, cy, cx + oL * Math.cos(outA), cy - oL * Math.sin(outA), "#cc6600", 3);
   // tip labels so input / output arrows are identifiable at a glance
