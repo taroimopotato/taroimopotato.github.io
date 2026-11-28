@@ -124,6 +124,25 @@
       .hud .status { margin-left: auto; font-size: 15px; font-weight: 700; }
       .hud .status b { font-family: "M PLUS Rounded 1c", sans-serif; font-size: 20px; }
 
+      /* ---------- カウントダウン（助走） ---------- */
+      .stage { position: relative; }
+      .countdown {
+        position: absolute; inset: 0; z-index: 5;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        pointer-events: none; text-align: center;
+      }
+      .countdown[hidden] { display: none; }
+      .countdown .count-num {
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+        font-size: clamp(84px, 22vw, 168px); line-height: 1; color: var(--ink);
+        text-shadow: 0 2px 0 var(--panel), 0 0 22px var(--panel), 0 0 42px var(--panel);
+      }
+      .countdown .count-sub {
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+        font-size: clamp(15px, 3.6vw, 22px); color: var(--ink);
+        background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 999px; padding: 3px 16px;
+      }
+
       /* ---------- ステージ ---------- */
       .stage {
         display: flex; gap: 12px;
@@ -157,6 +176,12 @@
       .panel.l .vertex-dot { fill: var(--accent-l); stroke: var(--accent-l); }
       .panel.r .vertex-dot { fill: var(--accent-r); stroke: var(--accent-r); }
       .vertex-dot.rest { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 4 3; opacity: 0.55; }
+      /* 辺の中間点：ひし形で頂点と区別する。デフォルト OFF（中抜き）→タップで ON（塗り） */
+      .mid-dot { stroke-width: 2.5; cursor: pointer; }
+      .panel.l .mid-dot { fill: var(--accent-l); stroke: var(--accent-l); }
+      .panel.r .mid-dot { fill: var(--accent-r); stroke: var(--accent-r); }
+      .mid-dot.off { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 3 3; opacity: 0.55; }
+      .mid-dot.note-pulse { animation: vpulse 0.22s ease-out; }
       .vertex-num { font-size: 10px; font-weight: 700; fill: var(--panel); text-anchor: middle; pointer-events: none; }
       .vertex-num.rest { fill: var(--ink-dim); }
       .vertex-dot.note-pulse { animation: vpulse 0.22s ease-out; }
@@ -318,6 +343,8 @@
             <option value="3">3</option><option value="4">4</option>
             <option value="5">5</option><option value="6">6</option>
             <option value="7">7</option><option value="8">8</option>
+            <option value="9">9</option><option value="10">10</option>
+            <option value="11">11</option><option value="12">12</option>
           </select>
         </label>
         <label>楽器
@@ -339,6 +366,8 @@
             <option value="3" selected>3</option><option value="4">4</option>
             <option value="5">5</option><option value="6">6</option>
             <option value="7">7</option><option value="8">8</option>
+            <option value="9">9</option><option value="10">10</option>
+            <option value="11">11</option><option value="12">12</option>
           </select>
         </label>
         <label>楽器
@@ -403,6 +432,10 @@
 
     <!-- ステージ -->
     <main class="stage">
+      <div class="countdown" id="countdown" hidden>
+        <span class="count-num num" id="countNum">3</span>
+        <span class="count-sub">助走中…このあと開始</span>
+      </div>
       <section class="panel l" id="panelL" aria-label="左の図形">
         <div class="panel-head">
           <span class="panel-name">左</span>
@@ -410,7 +443,7 @@
           <span class="panel-key">F キー / L1・L2</span>
         </div>
         <div class="svgwrap" id="wrapL"><div class="judge" id="judgeL"></div></div>
-        <div class="panel-foot">タップ / クリックでも打てる</div>
+        <div class="panel-foot">タップ / クリックでも打てる（頂点・中間点タップで ON/OFF）</div>
       </section>
       <section class="panel r" id="panelR" aria-label="右の図形">
         <div class="panel-head">
@@ -419,7 +452,7 @@
           <span class="panel-key">J キー / R1・R2</span>
         </div>
         <div class="svgwrap" id="wrapR"><div class="judge" id="judgeR"></div></div>
-        <div class="panel-foot">タップ / クリックでも打てる</div>
+        <div class="panel-foot">タップ / クリックでも打てる（頂点・中間点タップで ON/OFF）</div>
       </section>
     </main>
 
@@ -439,7 +472,8 @@
       左右の図形は<b>同じ時間で1周</b>します。マーカーが辺をたどって<b>頂点に来た瞬間</b>が打つタイミングです（左2・右3なら1周に2回と3回＝2対3のポリリズム）。
       打ち方は <b>PC：Fキー＝左、Jキー＝右</b>、<b>ゲームパッド（Xbox系）：L1／L2＝左、R1／R2＝右</b>、<b>スマホ：図形の下にある「左 TAP／右 TAP」のスペースをタップ</b>（指で図形が隠れません。パネルを直接タップ・クリックでも打てます）。
       ゲームパッドは、上の<b>ゲームパッド表示</b>で接続とボタンの反応を確認できます。開始前でも L1／L2／R1／R2 を押せば表示とパネルが光ります。反応しないときは、ページを1回クリックしてからボタンを押し直してみてください（ブラウザがパッドを見せるのは、ページにフォーカスがありボタンが押されてからです）。Xbox純正パッドは USB 接続＋Chrome／Edge が一番相性が良い組み合わせです。この埋め込み画面の中でどうしても認識されない場合は、上の<b>「HTMLを保存」</b>で単体ファイルを書き出して、ブラウザで直接開くか GitHub Pages に置いて試してください（埋め込み枠越しだとブラウザがパッドを見せないことがあります）。
-      <b>頂点をタップすると休符</b>に切り替わります（休符は音も判定もなし）。判定は PERFECT / GOOD / BAD / MISS で、テンポ・角数・休符の少なさで1打の点数が上がります。
+      <b>頂点をタップすると休符</b>に切り替わります（休符は音も判定もなし）。頂点はデフォルト ON です。各辺の<b>中間点（ひし形）</b>はデフォルト OFF で、タップすると ON になり、頂点と同じように打つ場所が1つ増えます（もう一度タップで OFF）。中間点が ON のときは、頂点と中間点が交互にタイミングになります。判定は PERFECT / GOOD / BAD / MISS で、テンポ・角数・有効な打点の多さで1打の点数が上がります。
+      スタートを押すと、まず<b>3周の助走</b>が流れ、画面に <b>3・2・1</b> と1周ごとにカウントダウンが出て、そのあと本番が始まります（助走中は打っても判定されず、ミスにもなりません）。角数は左右とも<b>1〜12</b>から選べます。
       打った瞬間には、そのときマーカーがあった位置に<b>判定色のマーカー</b>（PERFECT＝オレンジ／GOOD＝緑／BAD＝グレー）が残り、約半周かけてフワッと消えます。
       エンドレス／どのモードでも <b>ESC</b> で終了できます。音程は全頂点・左右とも同じ（ド）で、左右の違いは楽器の音色だけです。
       背景のリズムは小さな電子音（ピッ）で流れ、<b>自分が打てたときだけ設定した楽器の音</b>が鳴ります。
@@ -480,9 +514,11 @@
         ctx: null, master: null, noiseBuf: null,
         tempo: 0.5, mode: "miss", missLimit: 10, timeSec: 180,
         sides: {
-          L: { n: 2, inst: "marimba", rests: {}, events: [], cursorLoop: 0, cursorK: 0, els: null },
-          R: { n: 3, inst: "bell",    rests: {}, events: [], cursorLoop: 0, cursorK: 0, els: null }
+          L: { n: 2, inst: "marimba", rests: {}, midEnabled: {}, events: [], cursorLoop: 0, cursorStep: 0, els: null },
+          R: { n: 3, inst: "bell",    rests: {}, midEnabled: {}, events: [], cursorLoop: 0, cursorStep: 0, els: null }
         },
+        phase: "idle", /* idle | countdown（3周の助走） | playing */
+        countLoops: 0, countShown: -1, countAnim: null, countBus: null,
         score: 0, combo: 0, maxCombo: 0,
         counts: { perfect: 0, good: 0, bad: 0, miss: 0 },
         misses: 0,
@@ -497,6 +533,24 @@
       function vertexPos(n, k) {
         var a = -Math.PI / 2 + (k * TAU) / n;
         return { x: CX + RAD * Math.cos(a), y: CY + RAD * Math.sin(a) };
+      }
+      /* 辺 k（頂点 k → 頂点 k+1）の中間点。1角形・2角形は円弧の中点（円周上の点） */
+      function midPos(n, k) {
+        if (n <= 2) {
+          var a = -Math.PI / 2 + ((k + 0.5) * TAU) / n;
+          return { x: CX + RAD * Math.cos(a), y: CY + RAD * Math.sin(a) };
+        }
+        var p1 = vertexPos(n, k), p2 = vertexPos(n, (k + 1) % n);
+        return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      }
+      function activeCount(cfg) {
+        var c = cfg.n - Object.keys(cfg.rests).length;
+        for (var k in cfg.midEnabled) if (cfg.midEnabled[k]) c++;
+        return c;
+      }
+      function anyMidOn(cfg) {
+        for (var k in cfg.midEnabled) if (cfg.midEnabled[k]) return true;
+        return false;
       }
       function circlePathD() {
         return "M " + CX + " " + (CY - RAD) +
@@ -543,11 +597,15 @@
         motion.style.pointerEvents = "none";
         svg.appendChild(motion);
 
+        /* 頂点と中間点のタップ判定が重ならないよう、半径は頂点―中間点間隔（辺の半分）未満に抑える */
+        var chord = (n <= 2) ? 2 * RAD : 2 * RAD * Math.sin(Math.PI / n);
+        var hitR = Math.min(24, Math.max(10, chord * 0.24));
+
         var vertexDots = [], vertexNums = [];
         for (var k2 = 0; k2 < n; k2++) {
           (function (k) {
             var pos = vertexPos(n, k);
-            var hit = el("circle", { cx: pos.x, cy: pos.y, r: 24, fill: "rgba(0,0,0,0)" });
+            var hit = el("circle", { cx: pos.x, cy: pos.y, r: hitR, fill: "rgba(0,0,0,0)" });
             hit.style.cursor = "pointer";
             hit.addEventListener("pointerdown", function (e) {
               e.stopPropagation();
@@ -563,6 +621,26 @@
             svg.appendChild(num);
             vertexNums.push(num);
           })(k2);
+        }
+
+        /* 辺の中間点（ひし形）：デフォルト OFF、タップで ON ⇄ OFF */
+        var midDots = [];
+        for (var m2 = 0; m2 < n; m2++) {
+          (function (k) {
+            var pos = midPos(n, k);
+            var hit = el("circle", { cx: pos.x, cy: pos.y, r: hitR, fill: "rgba(0,0,0,0)" });
+            hit.style.cursor = "pointer";
+            hit.addEventListener("pointerdown", function (e) {
+              e.stopPropagation();
+              toggleMid(sideKey, k);
+            });
+            svg.appendChild(hit);
+            var pts = (pos.x) + " " + (pos.y - 8) + " " + (pos.x + 8) + " " + pos.y + " " + pos.x + " " + (pos.y + 8) + " " + (pos.x - 8) + " " + pos.y;
+            var dia = el("polygon", { points: pts, "class": "mid-dot off" });
+            dia.style.pointerEvents = "none";
+            svg.appendChild(dia);
+            midDots.push(dia);
+          })(m2);
         }
 
         var halo = el("circle", { r: 13, "class": "marker-halo" });
@@ -582,10 +660,9 @@
         if (!totalLen || !isFinite(totalLen)) {
           totalLen = (n === 1 || n === 2) ? TAU * RAD : n * 2 * RAD * Math.sin(Math.PI / n);
         }
-        cfg.els = { motion: motion, len: totalLen, dots: vertexDots, nums: vertexNums, marker: marker, halo: halo, marks: marks };
+        cfg.els = { motion: motion, len: totalLen, dots: vertexDots, nums: vertexNums, mids: midDots, marker: marker, halo: halo, marks: marks };
         paintVertices(sideKey);
         placeMarker(sideKey, 0);
-        $("shape" + sideKey).textContent = n + "回 / 周";
       }
 
       function paintVertices(sideKey) {
@@ -595,7 +672,9 @@
           var rest = !!cfg.rests[k];
           cfg.els.dots[k].classList.toggle("rest", rest);
           cfg.els.nums[k].classList.toggle("rest", rest);
+          if (cfg.els.mids && cfg.els.mids[k]) cfg.els.mids[k].classList.toggle("off", !cfg.midEnabled[k]);
         }
+        $("shape" + sideKey).textContent = activeCount(cfg) + "回 / 周";
         updateMult();
       }
 
@@ -632,11 +711,21 @@
       function pulseVertex(sideKey, k) {
         var cfg = state.sides[sideKey];
         if (!cfg.els || !cfg.els.dots[k]) return;
-        var d = cfg.els.dots[k];
+        pulseEl(cfg.els.dots[k]);
+      }
+      function pulseMid(sideKey, k) {
+        var cfg = state.sides[sideKey];
+        if (!cfg.els || !cfg.els.mids || !cfg.els.mids[k]) return;
+        pulseEl(cfg.els.mids[k]);
+      }
+      function pulseEl(d) {
         d.classList.remove("note-pulse");
         void d.getBBox;
         d.classList.add("note-pulse");
         setTimeout(function () { d.classList.remove("note-pulse"); }, 240);
+      }
+      function pulseEvent(sideKey, ev) {
+        if (ev.mid) pulseMid(sideKey, ev.k); else pulseVertex(sideKey, ev.k);
       }
 
       function toggleRest(sideKey, k) {
@@ -647,9 +736,23 @@
         if (state.running && state.ctx) {
           var now = state.ctx.currentTime;
           cfg.events = cfg.events.filter(function (ev) {
-            return ev.done || ev.time < now + 0.05 || ev.k !== k || !cfg.rests[k];
+            return ev.done || ev.time < now + 0.05 || ev.k !== k || ev.mid || !cfg.rests[k];
           });
           /* 休符を解除した場合はカーソルを巻き戻して次ループから確実に拾う（当周分は次周で鳴る） */
+        }
+      }
+
+      function toggleMid(sideKey, k) {
+        var cfg = state.sides[sideKey];
+        if (cfg.midEnabled[k]) delete cfg.midEnabled[k]; else cfg.midEnabled[k] = true;
+        paintVertices(sideKey);
+        /* OFF にした場合は、まだ来ていない中間点ノートを即取り消す。
+           ON にした場合は次の周から確実に鳴る（頂点の休符解除と同じ扱い） */
+        if (state.running && state.ctx && !cfg.midEnabled[k]) {
+          var now = state.ctx.currentTime;
+          cfg.events = cfg.events.filter(function (ev) {
+            return ev.done || ev.time < now + 0.05 || ev.k !== k || !ev.mid;
+          });
         }
       }
 
@@ -667,12 +770,12 @@
         for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       }
 
-      function envGain(t, peak, decay) {
+      function envGain(t, peak, decay, dest) {
         var g = state.ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
         g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + 0.006);
         g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
-        g.connect(state.master);
+        g.connect(dest || state.master);
         return g;
       }
       function osc(type, freq, t, dur, dest) {
@@ -701,12 +804,46 @@
       }
 
       /* 背景リズム：小さめの電子音（ピッ）。左右で少しだけ高さを変えて聞き分けられるようにする */
-      function playTick(sideKey, k, t) {
+      function playTick(sideKey, k, t, bus) {
         var f = sideKey === "L" ? 880 : 1174.66;
         if (k === 0) f *= 1.25;
-        var g = envGain(t, 0.09, 0.07);
+        var g = envGain(t, 0.09, 0.07, bus);
         osc("square", f, t, 0.07, g);
-        osc("sine", f * 2, t, 0.04, envGain(t, 0.03, 0.04));
+        osc("sine", f * 2, t, 0.04, envGain(t, 0.03, 0.04, bus));
+      }
+
+      /* 助走中のティックは専用バス経由で先行スケジュールする。
+         助走を中止／終了したらバスごと切って、予約済みの音が残らないようにする */
+      function scheduleCountdownTicks() {
+        cancelCountdownTicks();
+        state.countBus = state.ctx.createGain();
+        state.countBus.gain.value = 1;
+        state.countBus.connect(state.master);
+        var T = loopT();
+        for (var l = 0; l < 3; l++) {
+          ["L", "R"].forEach(function (sideKey) {
+            var cfg = state.sides[sideKey];
+            var steps = cfg.n * 2;
+            for (var s = 0; s < steps; s++) {
+              var isMid = (s % 2) === 1;
+              var k = Math.floor(s / 2);
+              var enabled = isMid ? !!cfg.midEnabled[k] : !cfg.rests[k];
+              if (!enabled) continue;
+              var t = state.startTime + l * T + (s / steps) * T;
+              playTick(sideKey, isMid ? -1 : k, t, state.countBus);
+            }
+          });
+        }
+      }
+      function cancelCountdownTicks() {
+        if (state.countBus) {
+          try {
+            state.countBus.gain.cancelScheduledValues(state.ctx ? state.ctx.currentTime : 0);
+            state.countBus.gain.value = 0;
+            state.countBus.disconnect();
+          } catch (e) {}
+          state.countBus = null;
+        }
       }
 
       function playNote(sideKey, k, t) {
@@ -763,15 +900,17 @@
 
       /* ================= 判定・スコア ================= */
       function badWin(sideKey) {
-        var gap = loopT() / state.sides[sideKey].n;
-        return Math.min(0.16, Math.max(0.06, gap * 0.45));
+        var cfg = state.sides[sideKey];
+        /* 中間点が1つでも ON なら打点間隔は半分になるので、判定窓もそれに合わせる */
+        var gap = loopT() / (anyMidOn(cfg) ? cfg.n * 2 : cfg.n);
+        return Math.min(0.16, Math.max(0.05, gap * 0.45));
       }
       function currentMult() {
         var a = state.sides.L, b = state.sides.R;
-        var total = a.n + b.n;
-        var active = (a.n - Object.keys(a.rests).length) + (b.n - Object.keys(b.rests).length);
-        if (total === 0) return 0;
-        return (state.tempo / 0.5) * (total / 6) * (active / total);
+        /* 1周あたりの有効な打点数（頂点 ON＋中間点 ON）で倍率が決まる。
+           中間点が全部 OFF のときは従来と同じ倍率になる */
+        var active = activeCount(a) + activeCount(b);
+        return (state.tempo / 0.5) * (active / 6);
       }
       function updateMult() {
         $("multVal").textContent = "×" + currentMult().toFixed(1);
@@ -833,6 +972,7 @@
 
       function hit(sideKey) {
         if (!state.running || !state.ctx) return;
+        if (state.phase !== "playing") { flashPanel(sideKey); return; } /* 助走中は判定しない */
         var now = state.ctx.currentTime;
         var cfg = state.sides[sideKey];
         var bw = badWin(sideKey);
@@ -861,7 +1001,7 @@
         if (kind === "bad") state.combo = 0;
         else { state.combo++; if (state.combo > state.maxCombo) state.maxCombo = state.combo; }
         addScore(kind);
-        pulseVertex(sideKey, best.k);
+        pulseEvent(sideKey, best);
         showJudge(sideKey, kind, kind.toUpperCase() + "!");
         updateHUD();
       }
@@ -879,31 +1019,95 @@
       }
 
       /* ================= スケジューリング ================= */
+      /* 1周を 2n ステップで進める：偶数ステップ＝頂点 k、奇数ステップ＝辺 k の中間点。
+         頂点は休符でなければ、中間点は ON のときだけイベントになる */
       function genEvents(sideKey) {
+        if (state.phase !== "playing") return;
         var cfg = state.sides[sideKey];
         var T = loopT();
         var now = state.ctx.currentTime;
         var horizon = now + 0.35;
+        var steps = cfg.n * 2;
         var guard = 0;
-        while (guard++ < 80) {
-          if (cfg.cursorK >= cfg.n) { cfg.cursorK = 0; cfg.cursorLoop += T; }
-          var t = cfg.cursorLoop + (cfg.cursorK / cfg.n) * T;
+        while (guard++ < 160) {
+          if (cfg.cursorStep >= steps) { cfg.cursorStep = 0; cfg.cursorLoop += T; }
+          var s = cfg.cursorStep;
+          var t = cfg.cursorLoop + (s / steps) * T;
           if (t > horizon) break;
-          if (!cfg.rests[cfg.cursorK] && t >= now - 0.25) {
-            cfg.events.push({ time: t, k: cfg.cursorK, done: false, flashed: false });
-            if (t >= now - 0.05) playTick(sideKey, cfg.cursorK, Math.max(t, now));
+          var isMid = (s % 2) === 1;
+          var k = Math.floor(s / 2);
+          var enabled = isMid ? !!cfg.midEnabled[k] : !cfg.rests[k];
+          if (enabled && t >= now - 0.25) {
+            cfg.events.push({ time: t, k: k, mid: isMid, done: false, flashed: false });
+            if (t >= now - 0.05) playTick(sideKey, isMid ? -1 : k, Math.max(t, now));
           }
-          cfg.cursorK++;
+          cfg.cursorStep++;
         }
+      }
+
+      /* カウントダウン表示：数字が変わるたびにアニメーションを最初から再生する */
+      function showCount(num) {
+        var box = $("countdown"), el = $("countNum");
+        if (!box || !el) return;
+        box.hidden = false;
+        if (state.countShown === num) return;
+        state.countShown = num;
+        el.textContent = String(num);
+        if (state.countAnim) { try { state.countAnim.cancel(); } catch (e) {} state.countAnim = null; }
+        if (el.animate) {
+          state.countAnim = el.animate([
+            { transform: "scale(1.35)", opacity: 0.4 },
+            { transform: "scale(1)", opacity: 1, offset: 0.25 },
+            { transform: "scale(1)", opacity: 1 }
+          ], { duration: 420, easing: "ease-out", fill: "forwards" });
+        }
+      }
+      function hideCount() {
+        var box = $("countdown");
+        if (box) box.hidden = true;
+        state.countShown = -1;
+      }
+
+      /* 助走が終わったら本番へ：ループの境目をそのまま本番の開始にそろえる */
+      function beginPlaying() {
+        cancelCountdownTicks();
+        state.phase = "playing";
+        state.startTime = state.curLoopStart;
+        state.endTime = state.startTime + state.timeSec;
+        hideCount();
+        ["L", "R"].forEach(function (sideKey) {
+          var cfg = state.sides[sideKey];
+          cfg.events = [];
+          cfg.cursorLoop = state.curLoopStart;
+          cfg.cursorStep = 0;
+        });
+        genEvents("L"); genEvents("R");
       }
 
       function tick() {
         if (!state.running) return;
         var now = state.ctx.currentTime;
         var T = loopT();
-        while (now >= state.curLoopStart + T) state.curLoopStart += T;
+        while (now >= state.curLoopStart + T) {
+          state.curLoopStart += T;
+          if (state.phase === "countdown") {
+            state.countLoops++;
+            if (state.countLoops >= 3) { beginPlaying(); if (!state.running) return; }
+          }
+        }
         var frac = (now - state.curLoopStart) / T;
         if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+
+        /* 助走中：マーカーは回るが、判定・ミス・制限時間はまだ始まらない */
+        if (state.phase === "countdown") {
+          placeMarker("L", frac);
+          placeMarker("R", frac);
+          var left = Math.max(1, 3 - state.countLoops);
+          showCount(left);
+          $("statusBox").innerHTML = "助走中… あと <b class='num'>" + left + "</b> 周で開始";
+          state.raf = requestAnimationFrame(tick);
+          return;
+        }
 
         if (state.mode === "time" && now >= state.endTime) { finish("制限時間おわり"); return; }
 
@@ -914,7 +1118,7 @@
           for (var i = 0; i < cfg.events.length; i++) {
             var ev = cfg.events[i];
             if (ev.done) continue;
-            if (!ev.flashed && now >= ev.time) { ev.flashed = true; pulseVertex(sideKey, ev.k); }
+            if (!ev.flashed && now >= ev.time) { ev.flashed = true; pulseEvent(sideKey, ev); }
             if (now > ev.time + bw) { markMiss(sideKey, ev); if (!state.running) return; }
           }
           cfg.events = cfg.events.filter(function (e) { return now - e.time < 1.5; });
@@ -946,33 +1150,50 @@
         state.score = 0; state.combo = 0; state.maxCombo = 0;
         state.counts = { perfect: 0, good: 0, bad: 0, miss: 0 };
         state.misses = 0;
+        /* まず3周の助走（カウントダウン 3・2・1）→ そのあと本番開始 */
+        state.phase = "countdown";
+        state.countLoops = 0;
+        state.countShown = -1;
         state.startTime = state.ctx.currentTime + 0.25;
         state.curLoopStart = state.startTime;
-        state.endTime = state.startTime + state.timeSec;
+        state.endTime = state.startTime + state.timeSec + loopT() * 3;
         ["L", "R"].forEach(function (sideKey) {
           var cfg = state.sides[sideKey];
           cfg.events = [];
           cfg.cursorLoop = state.startTime;
-          cfg.cursorK = 0;
+          cfg.cursorStep = 0;
         });
         state.running = true;
         $("startBtn").disabled = true;
         $("endBtn").disabled = false;
         $("mode").disabled = true; $("missLimit").disabled = true; $("timeMin").disabled = true;
         $("resultOverlay").hidden = true;
+        showCount(3);
+        scheduleCountdownTicks();
         updateHUD();
-        genEvents("L"); genEvents("R");
         clearInterval(state.schedTimer);
-        state.schedTimer = setInterval(function () { if (state.running) { genEvents("L"); genEvents("R"); } }, 30);
+        state.schedTimer = setInterval(function () { if (state.running && state.phase === "playing") { genEvents("L"); genEvents("R"); } }, 30);
         cancelAnimationFrame(state.raf);
         state.raf = requestAnimationFrame(tick);
       }
 
       function finish(reason) {
         if (!state.running) return;
+        var wasCountdown = state.phase === "countdown";
         state.running = false;
+        state.phase = "idle";
+        cancelCountdownTicks();
+        hideCount();
         clearInterval(state.schedTimer);
         cancelAnimationFrame(state.raf);
+        if (wasCountdown) {
+          /* 助走中の中止は結果画面を出さず、そのまま待機に戻る */
+          $("startBtn").disabled = false;
+          $("endBtn").disabled = true;
+          $("mode").disabled = false; $("missLimit").disabled = false; $("timeMin").disabled = false;
+          $("statusBox").textContent = "スタートを押してね";
+          return;
+        }
         $("startBtn").disabled = false;
         $("endBtn").disabled = true;
         $("mode").disabled = false; $("missLimit").disabled = false; $("timeMin").disabled = false;
@@ -992,7 +1213,7 @@
         var modeLabel = state.mode === "miss" ? "ミスで終了（上限" + state.missLimit + "回）" : state.mode === "time" ? "時間（" + Math.round(state.timeSec / 60) + "分）" : "エンドレス";
         var instName = function (v) { var s = document.querySelector("#instL option[value='" + v + "']"); return s ? s.textContent : v; };
         $("resultSetup").textContent =
-          "左 " + state.sides.L.n + "角形（" + instName(state.sides.L.inst) + "） × 右 " + state.sides.R.n + "角形（" + instName(state.sides.R.inst) + "）／ テンポ " +
+          "左 " + state.sides.L.n + "角形（" + instName(state.sides.L.inst) + "） × 右 " + state.sides.R.n + "角形（" + instName(state.sides.R.inst) + "）／ 打点 左 " + activeCount(state.sides.L) + "・右 " + activeCount(state.sides.R) + " 回/周 ／ テンポ " +
           state.tempo.toFixed(2) + " 周/秒 ／ モード：" + modeLabel + " ／ 倍率 ×" + currentMult().toFixed(1);
         $("resultOverlay").hidden = false;
       }
@@ -1002,14 +1223,15 @@
         var cfg = state.sides[sideKey];
         cfg.n = parseInt($(sideKey === "L" ? "nL" : "nR").value, 10);
         cfg.rests = {};
+        cfg.midEnabled = {};
         buildSide(sideKey);
-        if (state.running && state.ctx) {
+        if (state.running && state.ctx && state.phase === "playing") {
           var now = state.ctx.currentTime;
           var T = loopT();
           var frac = (now - state.curLoopStart) / T;
           cfg.events = [];
           cfg.cursorLoop = state.curLoopStart;
-          cfg.cursorK = Math.min(cfg.n - 1, Math.max(0, Math.ceil((frac - badWin(sideKey) / T) * cfg.n)));
+          cfg.cursorStep = Math.min(cfg.n * 2 - 1, Math.max(0, Math.ceil((frac - badWin(sideKey) / T) * cfg.n * 2)));
           genEvents(sideKey);
         }
         updateMult();
@@ -1030,14 +1252,16 @@
           state.tempo = v;
           var Tnew = loopT();
           state.curLoopStart = now - frac * Tnew;
-          if (state.mode === "time") { /* 終了時刻は絶対時刻のまま維持 */ }
-          ["L", "R"].forEach(function (sideKey) {
-            var cfg = state.sides[sideKey];
-            cfg.events = cfg.events.filter(function (e) { return e.done; });
-            cfg.cursorLoop = state.curLoopStart;
-            cfg.cursorK = Math.min(cfg.n - 1, Math.max(0, Math.ceil((frac - badWin(sideKey) / Tnew) * cfg.n)));
-            genEvents(sideKey);
-          });
+          if (state.mode === "time" && state.phase === "playing") { /* 終了時刻は絶対時刻のまま維持 */ }
+          if (state.phase === "playing") {
+            ["L", "R"].forEach(function (sideKey) {
+              var cfg = state.sides[sideKey];
+              cfg.events = cfg.events.filter(function (e) { return e.done; });
+              cfg.cursorLoop = state.curLoopStart;
+              cfg.cursorStep = Math.min(cfg.n * 2 - 1, Math.max(0, Math.ceil((frac - badWin(sideKey) / Tnew) * cfg.n * 2)));
+              genEvents(sideKey);
+            });
+          }
         } else {
           state.tempo = v;
         }
@@ -1321,7 +1545,7 @@
          JS 側の固定値と食い違うと図形が表示されない事故が起きるため、必ず select から読む */
       function syncShapeFromSelect(sideKey) {
         var v = parseInt($(sideKey === "L" ? "nL" : "nR").value, 10);
-        if (isFinite(v) && v >= 1 && v <= 8) state.sides[sideKey].n = v;
+        if (isFinite(v) && v >= 1 && v <= 12) state.sides[sideKey].n = v;
       }
       function ensureShapes() {
         /* SVG が作られていない／消えている側だけ作り直す（初回表示の取りこぼし対策） */
