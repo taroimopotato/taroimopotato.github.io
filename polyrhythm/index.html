@@ -175,15 +175,15 @@
       .vertex-dot { stroke-width: 3; cursor: pointer; }
       .panel.l .vertex-dot { fill: var(--accent-l); stroke: var(--accent-l); }
       .panel.r .vertex-dot { fill: var(--accent-r); stroke: var(--accent-r); }
-      .vertex-dot.rest { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 4 3; opacity: 0.55; }
+      .vertex-dot.rest { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 4 3; opacity: 0.18; }
       /* 辺の中間点：ひし形で頂点と区別する。デフォルト OFF（中抜き）→タップで ON（塗り） */
       .mid-dot { stroke-width: 2.5; cursor: pointer; }
       .panel.l .mid-dot { fill: var(--accent-l); stroke: var(--accent-l); }
       .panel.r .mid-dot { fill: var(--accent-r); stroke: var(--accent-r); }
-      .mid-dot.off { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 3 3; opacity: 0.55; }
+      .mid-dot.off { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 3 3; opacity: 0.18; }
       .mid-dot.note-pulse { animation: vpulse 0.22s ease-out; }
       .vertex-num { font-size: 10px; font-weight: 700; fill: var(--panel); text-anchor: middle; pointer-events: none; }
-      .vertex-num.rest { fill: var(--ink-dim); }
+      .vertex-num.rest { fill: var(--ink-dim); opacity: 0.22; }
       .vertex-dot.note-pulse { animation: vpulse 0.22s ease-out; }
       @keyframes vpulse { 0% { stroke-width: 10; } 100% { stroke-width: 3; } }
       .marker-halo { opacity: 0.22; }
@@ -407,7 +407,6 @@
       </div>
       <button class="start-btn" id="startBtn">▶ スタート</button>
       <button class="end-btn" id="endBtn" disabled>終了</button>
-      <button class="end-btn" id="dlBtn" type="button">HTMLを保存</button>
     </div>
 
     <!-- ゲームパッド状態（常時表示：接続とボタン反応をここで確認できる） -->
@@ -471,7 +470,7 @@
     <p class="help">
       左右の図形は<b>同じ時間で1周</b>します。マーカーが辺をたどって<b>頂点に来た瞬間</b>が打つタイミングです（左2・右3なら1周に2回と3回＝2対3のポリリズム）。
       打ち方は <b>PC：Fキー＝左、Jキー＝右</b>、<b>ゲームパッド（Xbox系）：L1／L2＝左、R1／R2＝右</b>、<b>スマホ：図形の下にある「左 TAP／右 TAP」のスペースをタップ</b>（指で図形が隠れません。パネルを直接タップ・クリックでも打てます）。
-      ゲームパッドは、上の<b>ゲームパッド表示</b>で接続とボタンの反応を確認できます。開始前でも L1／L2／R1／R2 を押せば表示とパネルが光ります。反応しないときは、ページを1回クリックしてからボタンを押し直してみてください（ブラウザがパッドを見せるのは、ページにフォーカスがありボタンが押されてからです）。Xbox純正パッドは USB 接続＋Chrome／Edge が一番相性が良い組み合わせです。この埋め込み画面の中でどうしても認識されない場合は、上の<b>「HTMLを保存」</b>で単体ファイルを書き出して、ブラウザで直接開くか GitHub Pages に置いて試してください（埋め込み枠越しだとブラウザがパッドを見せないことがあります）。
+      ゲームパッドは、上の<b>ゲームパッド表示</b>で接続とボタンの反応を確認できます。開始前でも L1／L2／R1／R2 を押せば表示とパネルが光ります。反応しないときは、ページを1回クリックしてからボタンを押し直してみてください（ブラウザがパッドを見せるのは、ページにフォーカスがありボタンが押されてからです）。Xbox純正パッドは USB 接続＋Chrome／Edge が一番相性が良い組み合わせです。この埋め込み画面の中でどうしても認識されない場合は、単体ファイルとしてブラウザで直接開くか GitHub Pages に置いて試してください（埋め込み枠越しだとブラウザがパッドを見せないことがあります）。
       <b>頂点をタップすると休符</b>に切り替わります（休符は音も判定もなし）。頂点はデフォルト ON です。各辺の<b>中間点（ひし形）</b>はデフォルト OFF で、タップすると ON になり、頂点と同じように打つ場所が1つ増えます（もう一度タップで OFF）。中間点が ON のときは、頂点と中間点が交互にタイミングになります。判定は PERFECT / GOOD / BAD / MISS で、テンポ・角数・有効な打点の多さで1打の点数が上がります。
       スタートを押すと、まず<b>3周の助走</b>が流れ、画面に <b>3・2・1</b> と1周ごとにカウントダウンが出て、そのあと本番が始まります（助走中は打っても判定されず、ミスにもなりません）。角数は左右とも<b>1〜12</b>から選べます。
       打った瞬間には、そのときマーカーがあった位置に<b>判定色のマーカー</b>（PERFECT＝オレンジ／GOOD＝緑／BAD＝グレー）が残り、約半周かけてフワッと消えます。
@@ -1300,32 +1299,6 @@
         state.timeSec = m * 60;
       });
       $("startBtn").addEventListener("click", start);
-      /* 単体HTMLとして保存する（GitHub Pages などに置いて直接開く用）。
-         埋め込み表示の中ではブラウザがゲームパッドを見せない場合があるため、
-         パッド確認はこの保存ファイルを開いた状態でも試せるようにする */
-      $("dlBtn").addEventListener("click", function () {
-        /* いま選んでいる角数・楽器・テンポなどを属性へ写してから丸ごと保存する */
-        var sels = document.querySelectorAll("select");
-        for (var i = 0; i < sels.length; i++) {
-          var opts = sels[i].options;
-          for (var o = 0; o < opts.length; o++) {
-            if (opts[o].selected) opts[o].setAttribute("selected", "");
-            else opts[o].removeAttribute("selected");
-          }
-        }
-        var inputs = document.querySelectorAll("input");
-        for (var n = 0; n < inputs.length; n++) inputs[n].setAttribute("value", inputs[n].value);
-        var html = "<!doctype html>\n" + document.documentElement.outerHTML;
-        var blob = new Blob([html], { type: "text/html;charset=utf-8" });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        a.href = url;
-        a.download = "polyrhythm-rhythm-game.html";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
-      });
       $("endBtn").addEventListener("click", function () { finish("終了ボタンでストップ"); });
       $("closeResult").addEventListener("click", function () { $("resultOverlay").hidden = true; });
       $("retryBtn").addEventListener("click", start);
