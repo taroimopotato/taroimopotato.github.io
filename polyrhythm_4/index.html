@@ -1,0 +1,1560 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>ポリリズム・リズムゲーム 4つ版</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --panel: #fffdf8;
+        --panel-edge: #ddd5c4;
+        --ink: #2b2620;
+        --ink-dim: #7a7264;
+        --acc0: #e4572e; --acc0-soft: #fbe3d9;
+        --acc1: #0e7c7b; --acc1-soft: #d7ecec;
+        --acc2: #3a7ca5; --acc2-soft: #dde9f2;
+        --acc3: #c2437f; --acc3-soft: #f9e0ec;
+        --track: #d8d0bf;
+        --perfect: #e8930c;
+        --good: #3d9970;
+        --bad: #8a93a3;
+        --miss: #d64545;
+        --btn: #2b2620;
+        --btn-ink: #fffdf8;
+        --overlay-bg: rgba(30, 26, 20, 0.55);
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16181d;
+          --panel: #20232a;
+          --panel-edge: #3a3f4a;
+          --ink: #ece7db;
+          --ink-dim: #9a958a;
+          --acc0: #ff7a4d; --acc0-soft: #452a20;
+          --acc1: #2fb3b1; --acc1-soft: #173a3a;
+          --acc2: #6db3dd; --acc2-soft: #1d3242;
+          --acc3: #ef7fb2; --acc3-soft: #42222f;
+          --track: #454b58;
+          --btn: #ece7db;
+          --btn-ink: #20232a;
+          --overlay-bg: rgba(0, 0, 0, 0.65);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+      button, select, input { font: inherit; color: inherit; }
+      button, [role="button"], select, input:not([type="checkbox"], [type="radio"]) { min-height: 2.5rem; }
+      .num { font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif; }
+
+      /* ---------- 設定バー ---------- */
+      .controls {
+        display: flex; flex-wrap: wrap; gap: 10px;
+        padding: 12px 12px 4px;
+        max-width: 1280px; margin: 0 auto;
+      }
+      .ctl-group {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        background: var(--panel); border: 1px solid var(--panel-edge);
+        border-radius: 12px; padding: 8px 12px;
+      }
+      .ctl-group.grow { flex: 1 1 auto; }
+      .side-tag {
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800; font-size: 15px;
+        padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+      }
+      .side-tag.s0 { background: var(--acc0-soft); color: var(--acc0); }
+      .side-tag.s1 { background: var(--acc1-soft); color: var(--acc1); }
+      .side-tag.s2 { background: var(--acc2-soft); color: var(--acc2); }
+      .side-tag.s3 { background: var(--acc3-soft); color: var(--acc3); }
+      .ctl-group label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-dim); }
+      .ctl-group select, .ctl-group input[type="number"] {
+        background: var(--bg); border: 1px solid var(--panel-edge); border-radius: 8px;
+        padding: 4px 8px; font-size: 15px; color: var(--ink);
+      }
+      .ctl-group input[type="number"] { width: 4.2em; }
+      .tempo-ctl { margin-left: auto; min-width: 230px; }
+      .tempo-ctl input[type="range"] { flex: 1; min-width: 110px; accent-color: var(--ink); min-height: 2.5rem; }
+      .tempo-val { font-weight: 800; font-size: 16px; color: var(--ink); white-space: nowrap; }
+      .tempo-sub { font-size: 12px; color: var(--ink-dim); white-space: nowrap; }
+
+      .modebar {
+        display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch;
+        padding: 8px 12px 4px; max-width: 1280px; margin: 0 auto;
+      }
+      .start-btn, .end-btn {
+        border: none; border-radius: 12px; padding: 8px 26px;
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800; font-size: 17px;
+        cursor: pointer; min-height: 3rem;
+      }
+      .start-btn { background: var(--btn); color: var(--btn-ink); }
+      .end-btn { background: var(--panel); color: var(--ink); border: 1px solid var(--panel-edge); }
+      .start-btn:disabled, .end-btn:disabled { opacity: 0.35; cursor: default; }
+      .ctl-group label.cond { display: none; }
+      .ctl-group label.cond.on { display: inline-flex; }
+
+      /* ---------- HUD ---------- */
+      .hud {
+        display: flex; flex-wrap: wrap; gap: 8px 26px; align-items: baseline;
+        padding: 10px 16px 2px; max-width: 1280px; margin: 0 auto;
+      }
+      .hud .item { font-size: 13px; color: var(--ink-dim); letter-spacing: 0.06em; white-space: nowrap; }
+      .hud .item b {
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+        font-size: 26px; color: var(--ink); margin-left: 6px; letter-spacing: 0;
+        display: inline-block; text-align: right; font-variant-numeric: tabular-nums;
+      }
+      /* スコア／コンボの桁数が増えても幅が変わらないよう予約幅を持たせる。
+         HUD が途中で改行して高さが変わり、下のタップ位置がずれるのを防ぐ */
+      #scoreVal { min-width: 5ch; }
+      #comboVal { min-width: 3ch; }
+      #multVal { min-width: 4ch; text-align: left; }
+      .hud .status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .hud .item b.combo-hot { color: var(--perfect); }
+      .hud .status { margin-left: auto; font-size: 15px; font-weight: 700; }
+      .hud .status b { font-family: "M PLUS Rounded 1c", sans-serif; font-size: 20px; }
+
+      /* ---------- カウントダウン（助走） ---------- */
+      .stage { position: relative; }
+      .countdown {
+        position: absolute; inset: 0; z-index: 5;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        pointer-events: none; text-align: center;
+      }
+      .countdown[hidden] { display: none; }
+      .countdown .count-num {
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+        font-size: clamp(84px, 22vw, 168px); line-height: 1; color: var(--ink);
+        text-shadow: 0 2px 0 var(--panel), 0 0 22px var(--panel), 0 0 42px var(--panel);
+      }
+      .countdown .count-sub {
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+        font-size: clamp(15px, 3.6vw, 22px); color: var(--ink);
+        background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 999px; padding: 3px 16px;
+      }
+
+      /* ---------- ステージ（PCは4つ横並び） ---------- */
+      .stage {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+        padding: 10px 12px 4px; max-width: 1280px; margin: 0 auto;
+      }
+      .panel {
+        min-width: 0;
+        background: var(--panel); border: 1px solid var(--panel-edge);
+        border-radius: 18px; padding: 10px 10px 8px;
+        touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+        cursor: pointer; position: relative;
+        transition: box-shadow 0.12s ease;
+        box-shadow: inset 0 0 0 2px transparent;
+      }
+      .panel.p0 { --acc: var(--acc0); }
+      .panel.p1 { --acc: var(--acc1); }
+      .panel.p2 { --acc: var(--acc2); }
+      .panel.p3 { --acc: var(--acc3); }
+      .panel.tapped { box-shadow: inset 0 0 0 3px var(--acc); }
+      .panel-head { display: flex; align-items: baseline; gap: 8px; padding: 0 4px; }
+      .panel-name { font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800; font-size: 19px; color: var(--acc); }
+      .panel-shape { font-size: 13px; color: var(--ink-dim); }
+      .panel-key { margin-left: auto; font-size: 12px; color: var(--ink-dim); white-space: nowrap; }
+      .svgwrap { position: relative; width: 100%; max-width: 300px; margin: 2px auto 0; }
+      .svgwrap svg { display: block; width: 100%; height: auto; }
+      .panel-foot { text-align: center; font-size: 12px; color: var(--ink-dim); padding-top: 2px; }
+
+      .track-path { fill: none; stroke: var(--track); stroke-width: 3; }
+      .track-arc-b { opacity: 0.55; }
+      .link-line { stroke: var(--track); stroke-width: 2; stroke-dasharray: 3 6; opacity: 0.7; }
+      .vertex-dot { stroke-width: 3; cursor: pointer; fill: var(--acc); stroke: var(--acc); }
+      .vertex-dot.rest { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 4 3; opacity: 0.18; }
+      /* 辺の中間点：ひし形で頂点と区別する。デフォルト OFF（中抜き）→タップで ON（塗り） */
+      .mid-dot { stroke-width: 2.5; cursor: pointer; fill: var(--acc); stroke: var(--acc); }
+      .mid-dot.off { fill: transparent; stroke: var(--ink-dim); stroke-dasharray: 3 3; opacity: 0.18; }
+      .mid-dot.note-pulse { animation: vpulse 0.22s ease-out; }
+      .vertex-num { font-size: 10px; font-weight: 700; fill: var(--panel); text-anchor: middle; pointer-events: none; }
+      .vertex-num.rest { fill: var(--ink-dim); opacity: 0.22; }
+      .vertex-dot.note-pulse { animation: vpulse 0.22s ease-out; }
+      @keyframes vpulse { 0% { stroke-width: 10; } 100% { stroke-width: 3; } }
+      .marker-halo { opacity: 0.22; fill: var(--acc); }
+      .marker-dot { fill: var(--acc); stroke: var(--panel); stroke-width: 2; }
+      .hit-mark { stroke: var(--panel); stroke-width: 1.5; pointer-events: none; animation: hitmarkFade 1s linear forwards; }
+      .hit-mark.perfect { fill: var(--perfect); }
+      .hit-mark.good { fill: var(--good); }
+      .hit-mark.bad { fill: var(--bad); }
+      @keyframes hitmarkFade {
+        0% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+
+      .judge {
+        position: absolute; left: 0; right: 0; top: 42%;
+        text-align: center; pointer-events: none;
+        font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800; font-size: clamp(22px, 3.4vw, 40px);
+        opacity: 0; z-index: 3;
+      }
+      .judge.show { animation: judgePop 0.75s ease-out forwards; }
+      .judge.perfect { color: var(--perfect); }
+      .judge.good { color: var(--good); }
+      .judge.bad { color: var(--bad); }
+      .judge.miss { color: var(--miss); }
+      .judge.stray { font-size: clamp(16px, 2.6vw, 26px); }
+      @keyframes judgePop {
+        0% { opacity: 0; transform: scale(0.55); }
+        14% { opacity: 1; transform: scale(1.18); }
+        30% { transform: scale(1); }
+        72% { opacity: 1; }
+        100% { opacity: 0; transform: scale(1.02); }
+      }
+
+      .help {
+        max-width: 1280px; margin: 0 auto; padding: 8px 16px 22px;
+        font-size: 13px; line-height: 1.7; color: var(--ink-dim);
+      }
+      .help b { color: var(--ink); }
+
+      /* ---------- ゲームパッド状態バー ---------- */
+      .padbar {
+        max-width: 1280px; margin: 2px auto 0; padding: 0 12px;
+      }
+      .padbar-inner {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+        background: var(--panel); border: 1px solid var(--panel-edge);
+        border-radius: 12px; padding: 8px 12px; font-size: 13px; color: var(--ink-dim);
+      }
+      .padbar-inner b { color: var(--ink); }
+      .pad-ind {
+        display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ink-dim);
+      }
+      .pad-ind.s0 { --acc: var(--acc0); }
+      .pad-ind.s1 { --acc: var(--acc1); }
+      .pad-ind.s2 { --acc: var(--acc2); }
+      .pad-ind.s3 { --acc: var(--acc3); }
+      .pad-dot {
+        width: 16px; height: 16px; border-radius: 50%;
+        border: 2px solid var(--panel-edge); background: var(--bg);
+        transition: background 0.05s, border-color 0.05s;
+      }
+      .pad-ind.on { color: var(--acc); }
+      .pad-ind.on .pad-dot { background: var(--acc); border-color: var(--acc); }
+      .pad-live { font-size: 12px; min-height: 1.2em; }
+      /* パッドの反応表示が出たり消えたりしてもバーの高さが変わらないよう行を予約する */
+      .pad-live { display: inline-block; min-width: 8em; white-space: nowrap; }
+      #padDebug { flex: 1 1 100%; min-height: 1.25em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* ---------- スマホ用タッチスペース（図形の下・2x2） ---------- */
+      .touch-zone { display: none; }
+      @media (max-width: 820px), (pointer: coarse) {
+        /* 多角形は2x2グリッド */
+        .stage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px 8px 4px; }
+        .touch-zone {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+          padding: 8px 8px 4px; max-width: 1280px; margin: 0 auto;
+        }
+        .touch-pad {
+          min-width: 0; min-height: 104px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+          border-radius: 18px; border: 2px solid var(--acc);
+          background: var(--acc-soft); color: var(--acc);
+          font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+          touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+          cursor: pointer; text-align: center;
+        }
+        .touch-pad.t0 { --acc: var(--acc0); --acc-soft: var(--acc0-soft); }
+        .touch-pad.t1 { --acc: var(--acc1); --acc-soft: var(--acc1-soft); }
+        .touch-pad.t2 { --acc: var(--acc2); --acc-soft: var(--acc2-soft); }
+        .touch-pad.t3 { --acc: var(--acc3); --acc-soft: var(--acc3-soft); }
+        .touch-pad .tp-main { font-size: 24px; line-height: 1.1; }
+        .touch-pad .tp-sub { font-family: inherit; font-weight: 700; font-size: 12px; opacity: 0.75; }
+        .touch-pad.flash { filter: brightness(1.18); }
+        .touch-pad:active { filter: brightness(1.15); transform: scale(0.985); }
+        .svgwrap { max-width: 260px; }
+        .panel-foot { display: none; }
+        .panel-key { display: none; }
+        /* HUD は「数値の行＋ステータスの行」の2行固定にする。
+           コンボやスコアが増えても改行位置が変わらず、タップスペースが上下にずれない */
+        .hud {
+          display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-rows: auto 1.7em; gap: 2px 10px; align-items: baseline;
+        }
+        .hud .item b { font-size: 20px; }
+        .hud .status { grid-column: 1 / -1; margin-left: 0; height: 1.7em; line-height: 1.7em; }
+      }
+
+      /* ---------- 結果 ---------- */
+      .overlay {
+        position: fixed; inset: 0; background: var(--overlay-bg);
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px; z-index: 10;
+      }
+      .overlay[hidden] { display: none; }
+      .result-card {
+        background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 20px;
+        padding: 24px 26px; width: 100%; max-width: 430px;
+        max-height: 92vh; overflow-y: auto;
+      }
+      .result-card h2 {
+        margin: 0 0 4px; font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800; font-size: 22px;
+      }
+      .result-reason { color: var(--ink-dim); font-size: 13px; margin-bottom: 14px; }
+      .result-score { font-size: 15px; color: var(--ink-dim); }
+      .result-score b {
+        display: block; font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800;
+        font-size: 46px; color: var(--ink); line-height: 1.15;
+      }
+      .result-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px;
+        margin: 16px 0; font-size: 15px;
+      }
+      .result-grid .row { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--panel-edge); padding: 5px 0; }
+      .result-grid .row b { font-family: "M PLUS Rounded 1c", sans-serif; }
+      .c-perfect { color: var(--perfect); } .c-good { color: var(--good); }
+      .c-bad { color: var(--bad); } .c-miss { color: var(--miss); }
+      .result-setup { font-size: 13px; color: var(--ink-dim); line-height: 1.7; margin-bottom: 18px; }
+      .result-btns { display: flex; gap: 10px; }
+      .result-btns button { flex: 1; }
+
+      @media (max-width: 640px) {
+        .tempo-ctl { margin-left: 0; }
+        .hud .status { margin-left: 0; }
+        .controls, .modebar { padding-left: 8px; padding-right: 8px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .judge.show { animation-duration: 0.2s; }
+        .vertex-dot.note-pulse { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 設定バー：4つの図形それぞれに角数と楽器 -->
+    <div class="controls" id="controls"></div>
+
+    <!-- モードバー -->
+    <div class="modebar">
+      <div class="ctl-group">
+        <label>モード
+          <select id="mode" aria-label="ゲームモード">
+            <option value="miss" selected>ミスで終了</option>
+            <option value="endless">エンドレス</option>
+            <option value="time">時間</option>
+          </select>
+        </label>
+        <label class="cond on" id="missWrap">ミス上限
+          <input type="number" id="missLimit" value="10" min="1" max="99" /> 回
+        </label>
+        <label class="cond" id="timeWrap">制限時間
+          <input type="number" id="timeMin" value="3" min="1" max="60" /> 分
+        </label>
+      </div>
+      <div class="ctl-group grow tempo-ctl">
+        <label>テンポ <span class="tempo-val num" id="tempoVal">0.50 周/秒</span></label>
+        <input type="range" id="tempo" min="0.25" max="1.5" step="0.05" value="0.5" aria-label="テンポ（1秒あたりの周数）" />
+        <span class="tempo-sub">1周 <span class="num" id="loopSec">2.00</span> 秒</span>
+      </div>
+      <button class="start-btn" id="startBtn">▶ スタート</button>
+      <button class="end-btn" id="endBtn" disabled>終了</button>
+    </div>
+
+    <!-- ゲームパッド状態（常時表示：接続とボタン反応をここで確認できる） -->
+    <div class="padbar">
+      <div class="padbar-inner">
+        <span>🎮 <b>ゲームパッド</b> <span id="padStatus">未検出 — USBでつないだあと、このページを1回クリックしてから、パッドのボタンをどれか1回押してください（Chrome / Edge 推奨）</span></span>
+        <button class="end-btn" id="padEnable" type="button" style="min-height:2.2rem;padding:4px 14px;font-size:13px;">パッドを有効化</button>
+        <span class="pad-ind s0" id="padInd0"><span class="pad-dot"></span>1番 L2</span>
+        <span class="pad-ind s1" id="padInd1"><span class="pad-dot"></span>2番 L1</span>
+        <span class="pad-ind s2" id="padInd2"><span class="pad-dot"></span>3番 R1</span>
+        <span class="pad-ind s3" id="padInd3"><span class="pad-dot"></span>4番 R2</span>
+        <span class="pad-live num" id="padLive"></span>
+        <span id="padDebug"></span>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div class="hud">
+      <span class="item">SCORE<b class="num" id="scoreVal">0</b></span>
+      <span class="item">COMBO<b class="num" id="comboVal">0</b></span>
+      <span class="item">倍率<b class="num" id="multVal">×1.0</b></span>
+      <span class="status" id="statusBox">スタートを押してね</span>
+    </div>
+
+    <!-- ステージ：PCは4つ横並び、スマホは2x2 -->
+    <main class="stage" id="stage">
+      <div class="countdown" id="countdown" hidden>
+        <span class="count-num num" id="countNum">3</span>
+        <span class="count-sub">助走中…このあと開始</span>
+      </div>
+    </main>
+
+    <!-- スマホ用タッチスペース：図形の下に2x2で並べる（指で図形が隠れない） -->
+    <div class="touch-zone" id="touchZone" aria-label="タッチスペース"></div>
+
+    <p class="help">
+      4つの図形はすべて<b>同じ時間で1周</b>します。マーカーが辺をたどって<b>頂点に来た瞬間</b>が打つタイミングです（2・3・4・5角形なら1周に2回・3回・4回・5回＝4つのポリリズム）。
+      打ち方は、左から順に <b>PC：D／F／J／K キー</b>、<b>ゲームパッド（Xbox系）：L2／L1／R1／R2</b>、<b>スマホ：図形の下に2x2で並んだ TAP スペース</b>（並びは図形と対応していて、指で図形が隠れません。パネルを直接タップ・クリックでも打てます）。
+      ゲームパッドは、上の<b>ゲームパッド表示</b>で接続とボタンの反応を確認できます。開始前でも L2／L1／R1／R2 を押せば表示とパネルが光ります。反応しないときは、ページを1回クリックしてからボタンを押し直してみてください（ブラウザがパッドを見せるのは、ページにフォーカスがありボタンが押されてからです）。Xbox純正パッドは USB 接続＋Chrome／Edge が一番相性が良い組み合わせです。この埋め込み画面の中でどうしても認識されない場合は、単体ファイルとしてブラウザで直接開くか GitHub Pages に置いて試してください（埋め込み枠越しだとブラウザがパッドを見せないことがあります）。
+      <b>頂点をタップすると休符</b>に切り替わります（休符は音も判定もなし）。頂点はデフォルト ON です。各辺の<b>中間点（ひし形）</b>はデフォルト OFF で、タップすると ON になり、頂点と同じように打つ場所が1つ増えます（もう一度タップで OFF）。中間点が ON のときは、頂点と中間点が交互にタイミングになります。判定は PERFECT / GOOD / BAD / MISS で、テンポ・角数・有効な打点の多さで1打の点数が上がります。
+      スタートを押すと、まず<b>3周の助走</b>が流れ、画面に <b>3・2・1</b> と1周ごとにカウントダウンが出て、そのあと本番が始まります（助走中は打っても判定されず、ミスにもなりません）。角数は4つとも<b>1〜12</b>から選べます。
+      打った瞬間には、そのときマーカーがあった位置に<b>判定色のマーカー</b>（PERFECT＝オレンジ／GOOD＝緑／BAD＝グレー）が残り、約半周かけてフワッと消えます。
+      エンドレス／どのモードでも <b>ESC</b> で終了できます。音程は全頂点・全図形とも同じ（ド）で、違いは楽器の音色だけです。
+      背景のリズムは小さな電子音（ピッ）で流れ、<b>自分が打てたときだけ設定した楽器の音</b>が鳴ります。
+    </p>
+
+    <!-- 結果 -->
+    <div class="overlay" id="resultOverlay" hidden>
+      <div class="result-card">
+        <h2>結果</h2>
+        <div class="result-reason" id="resultReason"></div>
+        <div class="result-score">SCORE<b class="num" id="resultScore">0</b></div>
+        <div class="result-grid">
+          <div class="row"><span class="c-perfect">PERFECT</span><b class="num" id="rPerfect">0</b></div>
+          <div class="row"><span>最大コンボ</span><b class="num" id="rCombo">0</b></div>
+          <div class="row"><span class="c-good">GOOD</span><b class="num" id="rGood">0</b></div>
+          <div class="row"><span>正確さ</span><b class="num" id="rAcc">0%</b></div>
+          <div class="row"><span class="c-bad">BAD</span><b class="num" id="rBad">0</b></div>
+          <div class="row"><span class="c-miss">MISS</span><b class="num" id="rMiss">0</b></div>
+        </div>
+        <div class="result-setup" id="resultSetup"></div>
+        <div class="result-btns">
+          <button class="end-btn" id="closeResult">閉じる</button>
+          <button class="start-btn" id="retryBtn">もう一度</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      "use strict";
+      var $ = function (id) { return document.getElementById(id); };
+      var TAU = Math.PI * 2;
+      var CX = 100, CY = 100, RAD = 76;
+
+      /* 4つの図形。左から順に 0,1,2,3。
+         PCキー：D F J K ／ ゲームパッド：L2 L1 R1 R2 */
+      var SIDE_COUNT = 4;
+      var SIDE_DEFS = [
+        { name: "1番", keyLabel: "D キー", padLabel: "L2", n: 2, inst: "marimba" },
+        { name: "2番", keyLabel: "F キー", padLabel: "L1", n: 3, inst: "bell" },
+        { name: "3番", keyLabel: "J キー", padLabel: "R1", n: 4, inst: "piano" },
+        { name: "4番", keyLabel: "K キー", padLabel: "R2", n: 5, inst: "xylophone" }
+      ];
+      var INST_OPTIONS = [
+        ["piano", "ピアノ"], ["marimba", "マリンバ"], ["bell", "ベル"],
+        ["synth", "シンセ"], ["xylophone", "木琴"], ["drum", "ドラム"]
+      ];
+      var BASE_FREQ = 261.63; /* 全頂点・全図形とも同じ音程（ド=C4）。違いは楽器の音色だけ */
+      var TICK_FREQ = [880, 1046.5, 1174.66, 1396.91]; /* 背景ピッの聞き分け用に図形ごとに少し変える */
+
+      var state = {
+        running: false,
+        ctx: null, master: null, noiseBuf: null,
+        tempo: 0.5, mode: "miss", missLimit: 10, timeSec: 180,
+        sides: [],
+        phase: "idle", /* idle | countdown（3周の助走） | playing */
+        countLoops: 0, countShown: -1, countAnim: null, countBus: null,
+        score: 0, combo: 0, maxCombo: 0,
+        counts: { perfect: 0, good: 0, bad: 0, miss: 0 },
+        misses: 0,
+        startTime: 0, curLoopStart: 0, endTime: 0,
+        raf: 0, schedTimer: 0, judgeTimers: {}, judgeAnims: {}, judgeSeq: {},
+        padSeen: false
+      };
+      for (var si = 0; si < SIDE_COUNT; si++) {
+        state.sides.push({ n: SIDE_DEFS[si].n, inst: SIDE_DEFS[si].inst, rests: {}, midEnabled: {}, events: [], cursorLoop: 0, cursorStep: 0, els: null });
+      }
+
+      function loopT() { return 1 / state.tempo; }
+      function eachSide(fn) { for (var i = 0; i < SIDE_COUNT; i++) fn(i); }
+
+      /* ================= 画面の構築（設定・パネル・タップ面） ================= */
+      function buildChrome() {
+        var controls = $("controls");
+        var stage = $("stage");
+        var zone = $("touchZone");
+        eachSide(function (i) {
+          var def = SIDE_DEFS[i];
+          /* 設定グループ */
+          var g = document.createElement("div");
+          g.className = "ctl-group";
+          var tag = document.createElement("span");
+          tag.className = "side-tag s" + i;
+          tag.textContent = def.name;
+          g.appendChild(tag);
+
+          var labN = document.createElement("label");
+          labN.appendChild(document.createTextNode("角数 "));
+          var selN = document.createElement("select");
+          selN.id = "n" + i;
+          selN.setAttribute("aria-label", def.name + "の角数");
+          for (var v = 1; v <= 12; v++) {
+            var o = document.createElement("option");
+            o.value = String(v); o.textContent = String(v);
+            if (v === def.n) o.selected = true;
+            selN.appendChild(o);
+          }
+          labN.appendChild(selN);
+          g.appendChild(labN);
+
+          var labI = document.createElement("label");
+          labI.appendChild(document.createTextNode("楽器 "));
+          var selI = document.createElement("select");
+          selI.id = "inst" + i;
+          selI.setAttribute("aria-label", def.name + "の楽器");
+          INST_OPTIONS.forEach(function (pair) {
+            var o2 = document.createElement("option");
+            o2.value = pair[0]; o2.textContent = pair[1];
+            if (pair[0] === def.inst) o2.selected = true;
+            selI.appendChild(o2);
+          });
+          labI.appendChild(selI);
+          g.appendChild(labI);
+          controls.appendChild(g);
+
+          /* パネル */
+          var sec = document.createElement("section");
+          sec.className = "panel p" + i;
+          sec.id = "panel" + i;
+          sec.setAttribute("aria-label", def.name + "の図形");
+          var head = document.createElement("div");
+          head.className = "panel-head";
+          var nm = document.createElement("span");
+          nm.className = "panel-name"; nm.textContent = def.name;
+          var sh = document.createElement("span");
+          sh.className = "panel-shape"; sh.id = "shape" + i;
+          sh.textContent = def.n + "回 / 周";
+          var ky = document.createElement("span");
+          ky.className = "panel-key"; ky.textContent = def.keyLabel + " / " + def.padLabel;
+          head.appendChild(nm); head.appendChild(sh); head.appendChild(ky);
+          var wrap = document.createElement("div");
+          wrap.className = "svgwrap"; wrap.id = "wrap" + i;
+          var judge = document.createElement("div");
+          judge.className = "judge"; judge.id = "judge" + i;
+          wrap.appendChild(judge);
+          var foot = document.createElement("div");
+          foot.className = "panel-foot";
+          foot.textContent = "タップ / クリックでも打てる（頂点・中間点タップで ON/OFF）";
+          sec.appendChild(head); sec.appendChild(wrap); sec.appendChild(foot);
+          stage.appendChild(sec);
+
+          /* スマホ用タップ面（図形と同じ並びで対応させる） */
+          var pad = document.createElement("div");
+          pad.className = "touch-pad t" + i;
+          pad.id = "touch" + i;
+          pad.setAttribute("role", "button");
+          pad.setAttribute("aria-label", def.name + "を打つ");
+          var main = document.createElement("span");
+          main.className = "tp-main"; main.textContent = def.name + " TAP";
+          var sub = document.createElement("span");
+          sub.className = "tp-sub"; sub.textContent = "ここをタップ（図形は隠れません）";
+          pad.appendChild(main); pad.appendChild(sub);
+          zone.appendChild(pad);
+        });
+      }
+
+      /* ================= 図形の構築 ================= */
+      function vertexPos(n, k) {
+        var a = -Math.PI / 2 + (k * TAU) / n;
+        return { x: CX + RAD * Math.cos(a), y: CY + RAD * Math.sin(a) };
+      }
+      /* 辺 k（頂点 k → 頂点 k+1）の中間点。1角形・2角形は円弧の中点（円周上の点） */
+      function midPos(n, k) {
+        if (n <= 2) {
+          var a = -Math.PI / 2 + ((k + 0.5) * TAU) / n;
+          return { x: CX + RAD * Math.cos(a), y: CY + RAD * Math.sin(a) };
+        }
+        var p1 = vertexPos(n, k), p2 = vertexPos(n, (k + 1) % n);
+        return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      }
+      function activeCount(cfg) {
+        var c = cfg.n - Object.keys(cfg.rests).length;
+        for (var k in cfg.midEnabled) if (cfg.midEnabled[k]) c++;
+        return c;
+      }
+      function anyMidOn(cfg) {
+        for (var k in cfg.midEnabled) if (cfg.midEnabled[k]) return true;
+        return false;
+      }
+      function circlePathD() {
+        return "M " + CX + " " + (CY - RAD) +
+               " A " + RAD + " " + RAD + " 0 1 1 " + CX + " " + (CY + RAD) +
+               " A " + RAD + " " + RAD + " 0 1 1 " + CX + " " + (CY - RAD);
+      }
+
+      function buildSide(i) {
+        var cfg = state.sides[i];
+        var n = cfg.n;
+        var wrap = $("wrap" + i);
+        var old = wrap.querySelector("svg");
+        if (old) old.remove();
+
+        var svgNS = "http://www.w3.org/2000/svg";
+        var svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("viewBox", "0 0 200 200");
+
+        function el(name, attrs) {
+          var e = document.createElementNS(svgNS, name);
+          for (var k in attrs) e.setAttribute(k, attrs[k]);
+          return e;
+        }
+
+        var motionD, trackEls = [];
+        if (n === 1) {
+          motionD = circlePathD();
+          trackEls.push(el("path", { d: motionD, "class": "track-path" }));
+        } else if (n === 2) {
+          motionD = circlePathD();
+          var top = vertexPos(2, 0), bot = vertexPos(2, 1);
+          trackEls.push(el("path", { d: "M " + top.x + " " + top.y + " A " + RAD + " " + RAD + " 0 0 1 " + bot.x + " " + bot.y, "class": "track-path" }));
+          trackEls.push(el("path", { d: "M " + bot.x + " " + bot.y + " A " + RAD + " " + RAD + " 0 0 1 " + top.x + " " + top.y, "class": "track-path track-arc-b" }));
+          trackEls.push(el("line", { x1: top.x, y1: top.y, x2: bot.x, y2: bot.y, "class": "link-line" }));
+        } else {
+          var pts = [];
+          for (var j = 0; j < n; j++) { var p = vertexPos(n, j); pts.push(p.x.toFixed(2) + " " + p.y.toFixed(2)); }
+          motionD = "M " + pts.join(" L ") + " Z";
+          trackEls.push(el("path", { d: motionD, "class": "track-path" }));
+        }
+        trackEls.forEach(function (t) { svg.appendChild(t); });
+
+        var motion = el("path", { d: motionD, fill: "none", stroke: "rgba(0,0,0,0)", "stroke-width": 1 });
+        motion.style.pointerEvents = "none";
+        svg.appendChild(motion);
+
+        /* 頂点と中間点のタップ判定が重ならないよう、半径は頂点―中間点間隔（辺の半分）未満に抑える */
+        var chord = (n <= 2) ? 2 * RAD : 2 * RAD * Math.sin(Math.PI / n);
+        var hitR = Math.min(24, Math.max(10, chord * 0.24));
+
+        var vertexDots = [], vertexNums = [];
+        for (var k2 = 0; k2 < n; k2++) {
+          (function (k) {
+            var pos = vertexPos(n, k);
+            var hitC = el("circle", { cx: pos.x, cy: pos.y, r: hitR, fill: "rgba(0,0,0,0)" });
+            hitC.style.cursor = "pointer";
+            hitC.addEventListener("pointerdown", function (e) {
+              e.stopPropagation();
+              toggleRest(i, k);
+            });
+            svg.appendChild(hitC);
+            var dot = el("circle", { cx: pos.x, cy: pos.y, r: 11, "class": "vertex-dot" });
+            dot.style.pointerEvents = "none";
+            svg.appendChild(dot);
+            vertexDots.push(dot);
+            var num = el("text", { x: pos.x, y: pos.y + 3.5, "class": "vertex-num" });
+            num.textContent = String(k + 1);
+            svg.appendChild(num);
+            vertexNums.push(num);
+          })(k2);
+        }
+
+        /* 辺の中間点（ひし形）：デフォルト OFF、タップで ON ⇄ OFF */
+        var midDots = [];
+        for (var m2 = 0; m2 < n; m2++) {
+          (function (k) {
+            var pos = midPos(n, k);
+            var hitC = el("circle", { cx: pos.x, cy: pos.y, r: hitR, fill: "rgba(0,0,0,0)" });
+            hitC.style.cursor = "pointer";
+            hitC.addEventListener("pointerdown", function (e) {
+              e.stopPropagation();
+              toggleMid(i, k);
+            });
+            svg.appendChild(hitC);
+            var pts = (pos.x) + " " + (pos.y - 8) + " " + (pos.x + 8) + " " + pos.y + " " + pos.x + " " + (pos.y + 8) + " " + (pos.x - 8) + " " + pos.y;
+            var dia = el("polygon", { points: pts, "class": "mid-dot off" });
+            dia.style.pointerEvents = "none";
+            svg.appendChild(dia);
+            midDots.push(dia);
+          })(m2);
+        }
+
+        var halo = el("circle", { r: 13, "class": "marker-halo" });
+        halo.style.pointerEvents = "none";
+        var marker = el("circle", { r: 7, "class": "marker-dot" });
+        marker.style.pointerEvents = "none";
+        svg.appendChild(halo);
+        svg.appendChild(marker);
+
+        var marks = el("g", { "class": "hit-marks" });
+        svg.appendChild(marks);
+
+        wrap.insertBefore(svg, wrap.firstChild);
+        /* getTotalLength は描画前の状態だと 0 や例外になるブラウザがあるので、幾何計算の予備値を用意する */
+        var totalLen = 0;
+        try { totalLen = motion.getTotalLength(); } catch (e) { totalLen = 0; }
+        if (!totalLen || !isFinite(totalLen)) {
+          totalLen = (n === 1 || n === 2) ? TAU * RAD : n * 2 * RAD * Math.sin(Math.PI / n);
+        }
+        cfg.els = { motion: motion, len: totalLen, dots: vertexDots, nums: vertexNums, mids: midDots, marker: marker, halo: halo, marks: marks };
+        paintVertices(i);
+        placeMarker(i, 0);
+      }
+
+      function paintVertices(i) {
+        var cfg = state.sides[i];
+        if (!cfg.els) return;
+        for (var k = 0; k < cfg.n; k++) {
+          var rest = !!cfg.rests[k];
+          cfg.els.dots[k].classList.toggle("rest", rest);
+          cfg.els.nums[k].classList.toggle("rest", rest);
+          if (cfg.els.mids && cfg.els.mids[k]) cfg.els.mids[k].classList.toggle("off", !cfg.midEnabled[k]);
+        }
+        $("shape" + i).textContent = activeCount(cfg) + "回 / 周";
+        updateMult();
+      }
+
+      function placeMarker(i, frac) {
+        var cfg = state.sides[i];
+        if (!cfg.els) return;
+        var pt = cfg.els.motion.getPointAtLength(frac * cfg.els.len);
+        cfg.els.marker.setAttribute("cx", pt.x); cfg.els.marker.setAttribute("cy", pt.y);
+        cfg.els.halo.setAttribute("cx", pt.x); cfg.els.halo.setAttribute("cy", pt.y);
+      }
+
+      /* 打った瞬間にマーカーがあった位置へ、判定色のマーカーを残す。
+         約半周（1周の半分の時間）かけて徐々にフェードアウトして消える */
+      function dropHitMarker(i, kind) {
+        var cfg = state.sides[i];
+        if (!cfg.els || !cfg.els.marks || !state.ctx) return;
+        var T = loopT();
+        var frac = (state.ctx.currentTime - state.curLoopStart) % T;
+        if (frac < 0) frac += T;
+        frac = frac / T;
+        var pt = cfg.els.motion.getPointAtLength(frac * cfg.els.len);
+        var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", pt.x.toFixed(2));
+        c.setAttribute("cy", pt.y.toFixed(2));
+        c.setAttribute("r", 6);
+        c.setAttribute("class", "hit-mark " + kind);
+        var fadeSec = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.4 : T / 2;
+        c.style.animationDuration = fadeSec + "s";
+        cfg.els.marks.appendChild(c);
+        while (cfg.els.marks.childNodes.length > 32) cfg.els.marks.removeChild(cfg.els.marks.firstChild);
+        setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, fadeSec * 1000 + 80);
+      }
+
+      function pulseVertex(i, k) {
+        var cfg = state.sides[i];
+        if (!cfg.els || !cfg.els.dots[k]) return;
+        pulseEl(cfg.els.dots[k]);
+      }
+      function pulseMid(i, k) {
+        var cfg = state.sides[i];
+        if (!cfg.els || !cfg.els.mids || !cfg.els.mids[k]) return;
+        pulseEl(cfg.els.mids[k]);
+      }
+      function pulseEl(d) {
+        d.classList.remove("note-pulse");
+        void d.getBBox;
+        d.classList.add("note-pulse");
+        setTimeout(function () { d.classList.remove("note-pulse"); }, 240);
+      }
+      function pulseEvent(i, ev) {
+        if (ev.mid) pulseMid(i, ev.k); else pulseVertex(i, ev.k);
+      }
+
+      function toggleRest(i, k) {
+        var cfg = state.sides[i];
+        if (cfg.rests[k]) delete cfg.rests[k]; else cfg.rests[k] = true;
+        paintVertices(i);
+        /* まだ鳴っていない直近の予定ノートにも即反映する */
+        if (state.running && state.ctx) {
+          var now = state.ctx.currentTime;
+          cfg.events = cfg.events.filter(function (ev) {
+            return ev.done || ev.time < now + 0.05 || ev.k !== k || ev.mid || !cfg.rests[k];
+          });
+          /* 休符を解除した場合はカーソルを巻き戻して次ループから確実に拾う（当周分は次周で鳴る） */
+        }
+      }
+
+      function toggleMid(i, k) {
+        var cfg = state.sides[i];
+        if (cfg.midEnabled[k]) delete cfg.midEnabled[k]; else cfg.midEnabled[k] = true;
+        paintVertices(i);
+        /* OFF にした場合は、まだ来ていない中間点ノートを即取り消す。
+           ON にした場合は次の周から確実に鳴る（頂点の休符解除と同じ扱い） */
+        if (state.running && state.ctx && !cfg.midEnabled[k]) {
+          var now = state.ctx.currentTime;
+          cfg.events = cfg.events.filter(function (ev) {
+            return ev.done || ev.time < now + 0.05 || ev.k !== k || !ev.mid;
+          });
+        }
+      }
+
+      /* ================= 音（Web Audio 合成） ================= */
+      function ensureCtx() {
+        if (state.ctx) { if (state.ctx.state === "suspended") state.ctx.resume(); return; }
+        var AC = window.AudioContext || window.webkitAudioContext;
+        state.ctx = new AC();
+        state.master = state.ctx.createGain();
+        state.master.gain.value = 0.55;
+        state.master.connect(state.ctx.destination);
+        var len = state.ctx.sampleRate * 0.5;
+        state.noiseBuf = state.ctx.createBuffer(1, len, state.ctx.sampleRate);
+        var data = state.noiseBuf.getChannelData(0);
+        for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      }
+
+      function envGain(t, peak, decay, dest) {
+        var g = state.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+        g.connect(dest || state.master);
+        return g;
+      }
+      function osc(type, freq, t, dur, dest) {
+        var o = state.ctx.createOscillator();
+        o.type = type; o.frequency.setValueAtTime(freq, t);
+        o.connect(dest); o.start(t); o.stop(t + dur + 0.1);
+        return o;
+      }
+
+      function playKick(t) {
+        var g = envGain(t, 0.95, 0.26);
+        var o = state.ctx.createOscillator();
+        o.type = "sine";
+        o.frequency.setValueAtTime(165, t);
+        o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
+        o.connect(g); o.start(t); o.stop(t + 0.4);
+      }
+      function playHat(t) {
+        var src = state.ctx.createBufferSource();
+        src.buffer = state.noiseBuf;
+        var hp = state.ctx.createBiquadFilter();
+        hp.type = "highpass"; hp.frequency.value = 7500;
+        var g = envGain(t, 0.32, 0.055);
+        src.connect(hp); hp.connect(g);
+        src.start(t); src.stop(t + 0.12);
+      }
+
+      /* 背景リズム：小さめの電子音（ピッ）。図形ごとに少しだけ高さを変えて聞き分けられるようにする */
+      function playTick(i, k, t, bus) {
+        var f = TICK_FREQ[i];
+        if (k === 0) f *= 1.25;
+        var g = envGain(t, 0.09, 0.07, bus);
+        osc("square", f, t, 0.07, g);
+        osc("sine", f * 2, t, 0.04, envGain(t, 0.03, 0.04, bus));
+      }
+
+      /* 助走中のティックは専用バス経由で先行スケジュールする。
+         助走を中止／終了したらバスごと切って、予約済みの音が残らないようにする */
+      function scheduleCountdownTicks() {
+        cancelCountdownTicks();
+        state.countBus = state.ctx.createGain();
+        state.countBus.gain.value = 1;
+        state.countBus.connect(state.master);
+        var T = loopT();
+        for (var l = 0; l < 3; l++) {
+          eachSide(function (i) {
+            var cfg = state.sides[i];
+            var steps = cfg.n * 2;
+            for (var s = 0; s < steps; s++) {
+              var isMid = (s % 2) === 1;
+              var k = Math.floor(s / 2);
+              var enabled = isMid ? !!cfg.midEnabled[k] : !cfg.rests[k];
+              if (!enabled) continue;
+              var t = state.startTime + l * T + (s / steps) * T;
+              playTick(i, isMid ? -1 : k, t, state.countBus);
+            }
+          });
+        }
+      }
+      function cancelCountdownTicks() {
+        if (state.countBus) {
+          try {
+            state.countBus.gain.cancelScheduledValues(state.ctx ? state.ctx.currentTime : 0);
+            state.countBus.gain.value = 0;
+            state.countBus.disconnect();
+          } catch (e) {}
+          state.countBus = null;
+        }
+      }
+
+      function playNote(i, k, t) {
+        var cfg = state.sides[i];
+        var f = BASE_FREQ;
+        var vel = k === 0 ? 1 : 0.85;
+        switch (cfg.inst) {
+          case "piano": {
+            osc("triangle", f, t, 1.2, envGain(t, 0.55 * vel, 1.15));
+            osc("sine", f * 2, t, 0.7, envGain(t, 0.16 * vel, 0.6));
+            osc("sine", f * 3, t, 0.4, envGain(t, 0.06 * vel, 0.3));
+            break;
+          }
+          case "marimba": {
+            osc("sine", f, t, 0.6, envGain(t, 0.8 * vel, 0.5));
+            osc("sine", f * 4, t, 0.2, envGain(t, 0.22 * vel, 0.13));
+            break;
+          }
+          case "xylophone": {
+            osc("sine", f, t, 0.35, envGain(t, 0.7 * vel, 0.27));
+            osc("sine", f * 2.76, t, 0.2, envGain(t, 0.3 * vel, 0.1));
+            osc("sine", f * 5.4, t, 0.1, envGain(t, 0.1 * vel, 0.05));
+            break;
+          }
+          case "bell": {
+            var car = state.ctx.createOscillator(); car.type = "sine"; car.frequency.value = f;
+            var mod = state.ctx.createOscillator(); mod.type = "sine"; mod.frequency.value = f * 3.01;
+            var mg = state.ctx.createGain();
+            mg.gain.setValueAtTime(f * 2.4, t);
+            mg.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+            var g = envGain(t, 0.5 * vel, 1.7);
+            mod.connect(mg); mg.connect(car.frequency);
+            car.connect(g); car.start(t); car.stop(t + 1.9);
+            mod.start(t); mod.stop(t + 1.9);
+            break;
+          }
+          case "synth": {
+            var lp = state.ctx.createBiquadFilter();
+            lp.type = "lowpass"; lp.Q.value = 4;
+            lp.frequency.setValueAtTime(2600, t);
+            lp.frequency.exponentialRampToValueAtTime(280, t + 0.32);
+            var g2 = envGain(t, 0.42 * vel, 0.4);
+            lp.connect(g2);
+            osc("sawtooth", f, t, 0.5, lp);
+            osc("square", f / 2, t, 0.5, lp);
+            break;
+          }
+          case "drum": {
+            if (k === 0) playKick(t); else playHat(t);
+            break;
+          }
+        }
+      }
+
+      /* ================= 判定・スコア ================= */
+      function badWin(i) {
+        var cfg = state.sides[i];
+        /* 中間点が1つでも ON なら打点間隔は半分になるので、判定窓もそれに合わせる */
+        var gap = loopT() / (anyMidOn(cfg) ? cfg.n * 2 : cfg.n);
+        return Math.min(0.16, Math.max(0.05, gap * 0.45));
+      }
+      function currentMult() {
+        /* 1周あたりの有効な打点数（頂点 ON＋中間点 ON）の合計で倍率が決まる。
+           デフォルト（2+3+4+5=14打点・テンポ0.5）で ×1.0 になるよう正規化 */
+        var active = 0;
+        eachSide(function (i) { active += activeCount(state.sides[i]); });
+        return (state.tempo / 0.5) * (active / 14);
+      }
+      function updateMult() {
+        $("multVal").textContent = "×" + currentMult().toFixed(1);
+      }
+      function updateHUD() {
+        $("scoreVal").textContent = state.score.toLocaleString("ja-JP");
+        var c = $("comboVal");
+        c.textContent = state.combo;
+        c.classList.toggle("combo-hot", state.combo >= 10);
+        updateMult();
+      }
+
+      function showJudge(i, kind, label) {
+        var j = $("judge" + i);
+        if (!j) return;
+        /* 前の判定がフワッと消えている最中に次の判定が来ても、必ず出し直す。
+           Web Animations で毎回キャンセルして最初から再生することで確実に表示する */
+        j.textContent = label;
+        j.className = "judge " + kind;
+        var prev = state.judgeAnims[i];
+        if (prev) { try { prev.cancel(); } catch (e) {} state.judgeAnims[i] = null; }
+        if (j.animate) {
+          var dur = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 300 : 750;
+          state.judgeAnims[i] = j.animate([
+            { opacity: 0, transform: "scale(0.55)" },
+            { opacity: 1, transform: "scale(1.18)", offset: 0.14 },
+            { opacity: 1, transform: "scale(1)", offset: 0.3 },
+            { opacity: 1, transform: "scale(1)", offset: 0.72 },
+            { opacity: 0, transform: "scale(1.02)", offset: 1 }
+          ], { duration: dur, easing: "ease-out", fill: "forwards" });
+        } else {
+          /* Web Animations が無い環境向け：クラスを外して再描画を挟んでから付け直す */
+          var token = (state.judgeSeq[i] = (state.judgeSeq[i] || 0) + 1);
+          j.classList.remove("show");
+          void j.offsetWidth;
+          j.classList.add("show");
+          clearTimeout(state.judgeTimers[i]);
+          state.judgeTimers[i] = setTimeout(function () {
+            if (state.judgeSeq[i] === token) j.className = "judge";
+          }, 780);
+        }
+      }
+
+      function addScore(kind) {
+        var base = kind === "perfect" ? 100 : kind === "good" ? 60 : kind === "bad" ? 20 : 0;
+        state.score += Math.round(base * currentMult());
+      }
+
+      /* パネル枠を一瞬光らせる（ゲーム開始前のパッド確認でも使う） */
+      function flashPanel(i) {
+        var panel = $("panel" + i);
+        if (!panel) return;
+        panel.classList.add("tapped");
+        setTimeout(function () { panel.classList.remove("tapped"); }, 160);
+      }
+
+      function hit(i) {
+        if (!state.running || !state.ctx) return;
+        if (state.phase !== "playing") { flashPanel(i); return; } /* 助走中は判定しない */
+        var now = state.ctx.currentTime;
+        var cfg = state.sides[i];
+        var bw = badWin(i);
+        flashPanel(i);
+
+        var best = null, bd = Infinity;
+        for (var j = 0; j < cfg.events.length; j++) {
+          var ev = cfg.events[j];
+          if (ev.done) continue;
+          var d = Math.abs(now - ev.time);
+          if (d <= bw && d < bd) { bd = d; best = ev; }
+        }
+        if (!best) {
+          state.combo = 0;
+          dropHitMarker(i, "bad");
+          showJudge(i, "bad stray", "BAD");
+          updateHUD();
+          return;
+        }
+        best.done = true;
+        /* 打てたときだけ、設定した楽器の音を鳴らす（背景は電子音のピッのみ） */
+        playNote(i, best.k, now);
+        var kind = bd <= bw * 0.32 ? "perfect" : bd <= bw * 0.65 ? "good" : "bad";
+        dropHitMarker(i, kind);
+        state.counts[kind]++;
+        if (kind === "bad") state.combo = 0;
+        else { state.combo++; if (state.combo > state.maxCombo) state.maxCombo = state.combo; }
+        addScore(kind);
+        pulseEvent(i, best);
+        showJudge(i, kind, kind.toUpperCase() + "!");
+        updateHUD();
+      }
+
+      function markMiss(i, ev) {
+        ev.done = true;
+        state.counts.miss++;
+        state.misses++;
+        state.combo = 0;
+        showJudge(i, "miss", "MISS");
+        updateHUD();
+        if (state.mode === "miss" && state.misses >= state.missLimit) {
+          finish("ミス " + state.missLimit + " 回で終了");
+        }
+      }
+
+      /* ================= スケジューリング ================= */
+      /* 1周を 2n ステップで進める：偶数ステップ＝頂点 k、奇数ステップ＝辺 k の中間点。
+         頂点は休符でなければ、中間点は ON のときだけイベントになる */
+      function genEvents(i) {
+        if (state.phase !== "playing") return;
+        var cfg = state.sides[i];
+        var T = loopT();
+        var now = state.ctx.currentTime;
+        var horizon = now + 0.35;
+        var steps = cfg.n * 2;
+        var guard = 0;
+        while (guard++ < 160) {
+          if (cfg.cursorStep >= steps) { cfg.cursorStep = 0; cfg.cursorLoop += T; }
+          var s = cfg.cursorStep;
+          var t = cfg.cursorLoop + (s / steps) * T;
+          if (t > horizon) break;
+          var isMid = (s % 2) === 1;
+          var k = Math.floor(s / 2);
+          var enabled = isMid ? !!cfg.midEnabled[k] : !cfg.rests[k];
+          if (enabled && t >= now - 0.25) {
+            cfg.events.push({ time: t, k: k, mid: isMid, done: false, flashed: false });
+            if (t >= now - 0.05) playTick(i, isMid ? -1 : k, Math.max(t, now));
+          }
+          cfg.cursorStep++;
+        }
+      }
+
+      /* カウントダウン表示：数字が変わるたびにアニメーションを最初から再生する */
+      function showCount(num) {
+        var box = $("countdown"), el = $("countNum");
+        if (!box || !el) return;
+        box.hidden = false;
+        if (state.countShown === num) return;
+        state.countShown = num;
+        el.textContent = String(num);
+        if (state.countAnim) { try { state.countAnim.cancel(); } catch (e) {} state.countAnim = null; }
+        if (el.animate) {
+          state.countAnim = el.animate([
+            { transform: "scale(1.35)", opacity: 0.4 },
+            { transform: "scale(1)", opacity: 1, offset: 0.25 },
+            { transform: "scale(1)", opacity: 1 }
+          ], { duration: 420, easing: "ease-out", fill: "forwards" });
+        }
+      }
+      function hideCount() {
+        var box = $("countdown");
+        if (box) box.hidden = true;
+        state.countShown = -1;
+      }
+
+      /* 助走が終わったら本番へ：ループの境目をそのまま本番の開始にそろえる */
+      function beginPlaying() {
+        cancelCountdownTicks();
+        state.phase = "playing";
+        state.startTime = state.curLoopStart;
+        state.endTime = state.startTime + state.timeSec;
+        hideCount();
+        eachSide(function (i) {
+          var cfg = state.sides[i];
+          cfg.events = [];
+          cfg.cursorLoop = state.curLoopStart;
+          cfg.cursorStep = 0;
+          genEvents(i);
+        });
+      }
+
+      function tick() {
+        if (!state.running) return;
+        var now = state.ctx.currentTime;
+        var T = loopT();
+        while (now >= state.curLoopStart + T) {
+          state.curLoopStart += T;
+          if (state.phase === "countdown") {
+            state.countLoops++;
+            if (state.countLoops >= 3) { beginPlaying(); if (!state.running) return; }
+          }
+        }
+        var frac = (now - state.curLoopStart) / T;
+        if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+
+        /* 助走中：マーカーは回るが、判定・ミス・制限時間はまだ始まらない */
+        if (state.phase === "countdown") {
+          eachSide(function (i) { placeMarker(i, frac); });
+          var left = Math.max(1, 3 - state.countLoops);
+          showCount(left);
+          $("statusBox").innerHTML = "助走中… あと <b class='num'>" + left + "</b> 周で開始";
+          state.raf = requestAnimationFrame(tick);
+          return;
+        }
+
+        if (state.mode === "time" && now >= state.endTime) { finish("制限時間おわり"); return; }
+
+        var aborted = false;
+        eachSide(function (i) {
+          if (aborted) return;
+          placeMarker(i, frac);
+          var cfg = state.sides[i];
+          var bw = badWin(i);
+          for (var j = 0; j < cfg.events.length; j++) {
+            var ev = cfg.events[j];
+            if (ev.done) continue;
+            if (!ev.flashed && now >= ev.time) { ev.flashed = true; pulseEvent(i, ev); }
+            if (now > ev.time + bw) { markMiss(i, ev); if (!state.running) { aborted = true; return; } }
+          }
+          cfg.events = cfg.events.filter(function (e) { return now - e.time < 1.5; });
+        });
+        if (!state.running) return;
+
+        /* ステータス表示 */
+        var sb = $("statusBox");
+        if (state.mode === "miss") {
+          sb.innerHTML = "ミス あと <b class='num'>" + Math.max(0, state.missLimit - state.misses) + "</b> 回";
+        } else if (state.mode === "time") {
+          var remain = Math.max(0, state.endTime - now);
+          sb.innerHTML = "残り <b class='num'>" + fmtTime(remain) + "</b>";
+        } else {
+          sb.innerHTML = "経過 <b class='num'>" + fmtTime(now - state.startTime) + "</b>";
+        }
+        state.raf = requestAnimationFrame(tick);
+      }
+
+      function fmtTime(sec) {
+        var s = Math.ceil(sec);
+        var m = Math.floor(s / 60);
+        var r = s % 60;
+        return m + ":" + (r < 10 ? "0" : "") + r;
+      }
+
+      /* ================= 開始・終了 ================= */
+      function start() {
+        ensureCtx();
+        state.score = 0; state.combo = 0; state.maxCombo = 0;
+        state.counts = { perfect: 0, good: 0, bad: 0, miss: 0 };
+        state.misses = 0;
+        /* まず3周の助走（カウントダウン 3・2・1）→ そのあと本番開始 */
+        state.phase = "countdown";
+        state.countLoops = 0;
+        state.countShown = -1;
+        state.startTime = state.ctx.currentTime + 0.25;
+        state.curLoopStart = state.startTime;
+        state.endTime = state.startTime + state.timeSec + loopT() * 3;
+        eachSide(function (i) {
+          var cfg = state.sides[i];
+          cfg.events = [];
+          cfg.cursorLoop = state.startTime;
+          cfg.cursorStep = 0;
+        });
+        state.running = true;
+        $("startBtn").disabled = true;
+        $("endBtn").disabled = false;
+        $("mode").disabled = true; $("missLimit").disabled = true; $("timeMin").disabled = true;
+        $("resultOverlay").hidden = true;
+        showCount(3);
+        scheduleCountdownTicks();
+        updateHUD();
+        clearInterval(state.schedTimer);
+        state.schedTimer = setInterval(function () {
+          if (state.running && state.phase === "playing") eachSide(genEvents);
+        }, 30);
+        cancelAnimationFrame(state.raf);
+        state.raf = requestAnimationFrame(tick);
+      }
+
+      function finish(reason) {
+        if (!state.running) return;
+        var wasCountdown = state.phase === "countdown";
+        state.running = false;
+        state.phase = "idle";
+        cancelCountdownTicks();
+        hideCount();
+        clearInterval(state.schedTimer);
+        cancelAnimationFrame(state.raf);
+        $("startBtn").disabled = false;
+        $("endBtn").disabled = true;
+        $("mode").disabled = false; $("missLimit").disabled = false; $("timeMin").disabled = false;
+        if (wasCountdown) {
+          /* 助走中の中止は結果画面を出さず、そのまま待機に戻る */
+          $("statusBox").textContent = "スタートを押してね";
+          return;
+        }
+        $("statusBox").textContent = "おつかれさま！";
+
+        var c = state.counts;
+        var total = c.perfect + c.good + c.bad + c.miss;
+        var acc = total ? ((c.perfect + c.good * 0.6 + c.bad * 0.2) / total) * 100 : 0;
+        $("resultReason").textContent = reason;
+        $("resultScore").textContent = state.score.toLocaleString("ja-JP");
+        $("rPerfect").textContent = c.perfect;
+        $("rGood").textContent = c.good;
+        $("rBad").textContent = c.bad;
+        $("rMiss").textContent = c.miss;
+        $("rCombo").textContent = state.maxCombo;
+        $("rAcc").textContent = acc.toFixed(1) + "%";
+        var modeLabel = state.mode === "miss" ? "ミスで終了（上限" + state.missLimit + "回）" : state.mode === "time" ? "時間（" + Math.round(state.timeSec / 60) + "分）" : "エンドレス";
+        var instName = function (v) {
+          for (var q = 0; q < INST_OPTIONS.length; q++) if (INST_OPTIONS[q][0] === v) return INST_OPTIONS[q][1];
+          return v;
+        };
+        var parts = [];
+        eachSide(function (i) {
+          parts.push(SIDE_DEFS[i].name + " " + state.sides[i].n + "角形（" + instName(state.sides[i].inst) + "・打点 " + activeCount(state.sides[i]) + "回/周）");
+        });
+        $("resultSetup").textContent =
+          parts.join(" ／ ") + " ／ テンポ " + state.tempo.toFixed(2) + " 周/秒 ／ モード：" + modeLabel + " ／ 倍率 ×" + currentMult().toFixed(1);
+        $("resultOverlay").hidden = false;
+      }
+
+      /* ================= 設定変更 ================= */
+      function onShapeChange(i) {
+        var cfg = state.sides[i];
+        cfg.n = parseInt($("n" + i).value, 10);
+        cfg.rests = {};
+        cfg.midEnabled = {};
+        buildSide(i);
+        if (state.running && state.ctx && state.phase === "playing") {
+          var now = state.ctx.currentTime;
+          var T = loopT();
+          var frac = (now - state.curLoopStart) / T;
+          cfg.events = [];
+          cfg.cursorLoop = state.curLoopStart;
+          cfg.cursorStep = Math.min(cfg.n * 2 - 1, Math.max(0, Math.ceil((frac - badWin(i) / T) * cfg.n * 2)));
+          genEvents(i);
+        }
+        updateMult();
+      }
+
+      function onTempoInput() {
+        var v = parseFloat($("tempo").value);
+        $("tempoVal").textContent = v.toFixed(2) + " 周/秒";
+        $("loopSec").textContent = (1 / v).toFixed(2);
+      }
+      function onTempoChange() {
+        var v = parseFloat($("tempo").value);
+        if (state.running && state.ctx) {
+          var now = state.ctx.currentTime;
+          var Told = loopT();
+          var frac = (now - state.curLoopStart) / Told;
+          if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+          state.tempo = v;
+          var Tnew = loopT();
+          state.curLoopStart = now - frac * Tnew;
+          if (state.phase === "playing") {
+            eachSide(function (i) {
+              var cfg = state.sides[i];
+              cfg.events = cfg.events.filter(function (e) { return e.done; });
+              cfg.cursorLoop = state.curLoopStart;
+              cfg.cursorStep = Math.min(cfg.n * 2 - 1, Math.max(0, Math.ceil((frac - badWin(i) / Tnew) * cfg.n * 2)));
+              genEvents(i);
+            });
+          }
+        } else {
+          state.tempo = v;
+        }
+        updateMult();
+      }
+
+      function onModeChange() {
+        state.mode = $("mode").value;
+        $("missWrap").classList.toggle("on", state.mode === "miss");
+        $("timeWrap").classList.toggle("on", state.mode === "time");
+      }
+
+      /* ================= イベント配線 ================= */
+      function wireEvents() {
+        eachSide(function (i) {
+          $("n" + i).addEventListener("change", function () { onShapeChange(i); });
+          $("inst" + i).addEventListener("change", function () {
+            state.sides[i].inst = this.value;
+            ensureCtx(); playNote(i, 0, state.ctx.currentTime + 0.02);
+          });
+          $("panel" + i).addEventListener("pointerdown", function () { hit(i); });
+
+          /* スマホ用タッチスペース（図形の下）：開始前でも光って反応が分かるようにする */
+          var pad = $("touch" + i);
+          pad.addEventListener("pointerdown", function (e) {
+            e.preventDefault();
+            pad.classList.add("flash");
+            setTimeout(function () { pad.classList.remove("flash"); }, 160);
+            if (state.running) hit(i);
+            else flashPanel(i);
+          });
+        });
+        $("tempo").addEventListener("input", onTempoInput);
+        $("tempo").addEventListener("change", onTempoChange);
+        $("mode").addEventListener("change", onModeChange);
+        $("missLimit").addEventListener("change", function () {
+          var v = parseInt(this.value, 10);
+          state.missLimit = isFinite(v) && v >= 1 ? Math.min(99, v) : 10;
+          this.value = state.missLimit;
+        });
+        $("timeMin").addEventListener("change", function () {
+          var v = parseInt(this.value, 10);
+          var m = isFinite(v) && v >= 1 ? Math.min(60, v) : 3;
+          this.value = m;
+          state.timeSec = m * 60;
+        });
+        $("startBtn").addEventListener("click", start);
+        $("endBtn").addEventListener("click", function () { finish("終了ボタンでストップ"); });
+        $("closeResult").addEventListener("click", function () { $("resultOverlay").hidden = true; });
+        $("retryBtn").addEventListener("click", start);
+      }
+
+      /* PCキー：左から D＝1番 / F＝2番 / J＝3番 / K＝4番 */
+      var KEY_TO_SIDE = { KeyD: 0, KeyF: 1, KeyJ: 2, KeyK: 3 };
+      var LETTER_TO_SIDE = { d: 0, f: 1, j: 2, k: 3 };
+      function keySideOf(e) {
+        /* Ctrl/Alt/Meta との組み合わせや、数値入力欄などへの文字入力は邪魔しない */
+        if (e.ctrlKey || e.metaKey || e.altKey) return null;
+        var t = e.target;
+        if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return null;
+        if (e.code && KEY_TO_SIDE.hasOwnProperty(e.code)) return KEY_TO_SIDE[e.code];
+        if (e.key && LETTER_TO_SIDE.hasOwnProperty(e.key.toLowerCase())) return LETTER_TO_SIDE[e.key.toLowerCase()];
+        return null;
+      }
+      /* セレクトやスライダーにフォーカスがある状態でも確実に拾えるよう、window のキャプチャ段階で受ける */
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { if (state.running) finish("ESCで終了"); return; }
+        if (e.repeat) return;
+        var side = keySideOf(e);
+        if (side !== null && side !== undefined) { e.preventDefault(); hit(side); }
+      }, true);
+
+      /* ================= ゲームパッド（Xbox系） =================
+         左から L2＝1番 / L1＝2番 / R1＝3番 / R2＝4番。
+         標準マッピングでは buttons[6]=L2, [4]=L1, [5]=R1, [7]=R2。
+         埋め込み枠越しだとブラウザがパッドを見せないことがあるため、対策を全部入れる：
+         1) 未検出の間も含め常時ポーリングし、ページへのクリック／キー操作のたびにも即ポーリング。
+         2) getGamepads / webkitGetGamepads 両対応、null や例外でもポーリングを止めない。
+         3) 非標準マッピング機でトリガーが軸に出る場合（axes[6]=LT→1番 / axes[7]=RT→4番）も拾う。
+            トリガーのアナログ閾値は 0.2 に下げ、軽い押し込みでも反応させる。
+         4) 接続中はパッド名・押されているボタン番号を常時表示し、4つのインジケーターが
+            押下中ずっと光る（エッジだけでなく押下状態そのものを見せる）。
+         5) ポーリングは setInterval(16ms) を本線にし、rAF は補助。
+         押しっぱなしはボタン単位のエッジ検出で1回だけ打つ
+         （L2を離さず L1 を追加で押しても2番としてもう1回打てる）。 */
+      var PAD_BTN_NAME = { 4: "L1", 5: "R1", 6: "L2", 7: "R2" };
+      var PAD_BTN_SIDE = { 6: 0, 4: 1, 5: 2, 7: 3 };
+      var padBtnPrev = {};   /* "padIndex:btnIndex" → 前回の押下状態 */
+      var padAxisPrev = { 0: false, 3: false };
+      var padApiMissing = false;
+
+      function getPadsRaw() {
+        try {
+          if (navigator.getGamepads) return navigator.getGamepads();
+          if (navigator.webkitGetGamepads) return navigator.webkitGetGamepads();
+        } catch (e) { return null; }
+        return null;
+      }
+
+      function padPressed(gp, idx) {
+        var b = gp.buttons && gp.buttons[idx];
+        if (!b) return false;
+        return !!b.pressed || !!b.touched || (typeof b.value === "number" && b.value > 0.2);
+      }
+
+      function setPadStatus(text) {
+        var el = $("padStatus");
+        if (el && el.textContent !== text) el.textContent = text;
+      }
+      function setPadLive(text) {
+        var el = $("padLive");
+        if (el && el.textContent !== text) el.textContent = text;
+      }
+      function setPadInd(i, on) {
+        var el = $("padInd" + i);
+        if (el) el.classList.toggle("on", !!on);
+      }
+
+      function padEdge(i, label) {
+        var dbg = $("padDebug");
+        if (dbg) dbg.textContent = "→ " + label + "（" + SIDE_DEFS[i].name + "）で打ちました";
+        if (state.running) hit(i);
+        else flashPanel(i);
+      }
+
+      function pollGamepad() {
+        try {
+          if (!navigator.getGamepads && !navigator.webkitGetGamepads) {
+            if (!padApiMissing) {
+              padApiMissing = true;
+              setPadStatus("このブラウザ／表示方法では Gamepad API が使えません。Chrome か Edge でこのページを開いてください");
+            }
+            return;
+          }
+          var pads = getPadsRaw();
+          if (!pads) return;
+          var gp = null, gpCount = 0;
+          var sideNow = [false, false, false, false];
+          var pressedList = [];
+          for (var i = 0; i < pads.length; i++) {
+            var p = pads[i];
+            if (!p) continue;
+            gpCount++;
+            if (!gp) gp = p;
+            var btns = p.buttons || [];
+            for (var b = 0; b < btns.length; b++) {
+              var now = padPressed(p, b);
+              var key = i + ":" + b;
+              if (now) {
+                pressedList.push((PAD_BTN_NAME[b] || ("B" + b)));
+                var side = PAD_BTN_SIDE[b];
+                if (side !== undefined) sideNow[side] = true;
+                if (!padBtnPrev[key]) {
+                  if (side !== undefined) padEdge(side, PAD_BTN_NAME[b]);
+                  else {
+                    var dbg2 = $("padDebug");
+                    if (dbg2) dbg2.textContent = "→ ボタン" + b + " を検出（打鍵は L2／L1／R1／R2 のみ）";
+                  }
+                }
+              }
+              padBtnPrev[key] = now;
+            }
+            /* 非標準マッピングでトリガーが軸に出る機種への保険（標準マッピングでは使わない） */
+            if (p.mapping !== "standard" && p.axes) {
+              var ltAx = (p.axes.length > 7) ? p.axes[6] : null;
+              var rtAx = (p.axes.length > 7) ? p.axes[7] : null;
+              if (typeof ltAx === "number") {
+                var lOn = ltAx > 0.4;
+                if (lOn) { sideNow[0] = true; if (!padAxisPrev[0]) padEdge(0, "L2(軸)"); }
+                padAxisPrev[0] = lOn;
+              }
+              if (typeof rtAx === "number") {
+                var rOn = rtAx > 0.4;
+                if (rOn) { sideNow[3] = true; if (!padAxisPrev[3]) padEdge(3, "R2(軸)"); }
+                padAxisPrev[3] = rOn;
+              }
+            }
+          }
+          if (!gp) {
+            if (state.padSeen) {
+              state.padSeen = false;
+              setPadStatus("未検出 — USBでつないだあと、このページを1回クリックしてから、パッドのボタンをどれか1回押してください（Chrome / Edge 推奨）");
+              setPadLive("");
+              eachSide(function (i) { setPadInd(i, false); });
+            }
+            padBtnPrev = {};
+            return;
+          }
+          if (!state.padSeen) state.padSeen = true;
+          var idShort = (gp.id || "Gamepad");
+          if (idShort.length > 42) idShort = idShort.slice(0, 42) + "…";
+          setPadStatus("接続中：" + idShort + "（" + (gp.mapping || "マッピング不明") + (gpCount > 1 ? "、他" + (gpCount - 1) + "台" : "") + "）");
+          eachSide(function (i) { setPadInd(i, sideNow[i]); });
+          setPadLive(pressedList.length ? "押下中：" + pressedList.join(" ") : "");
+        } catch (e) {
+          /* 例外でポーリング全体を死なせない */
+        }
+      }
+      window.addEventListener("gamepadconnected", function (e) {
+        state.padSeen = true;
+        var g = e.gamepad || {};
+        setPadStatus("接続中：" + (g.id || "Gamepad") + "（" + (g.mapping || "マッピング不明") + "）");
+        pollGamepad();
+      });
+      /* イベントが document 側に届く実装もあるので両方で受ける */
+      document.addEventListener("gamepadconnected", function () { state.padSeen = true; pollGamepad(); });
+      /* 「パッドを有効化」ボタン：このページ（枠）へフォーカスを移してから即ポーリングする。
+         ブラウザはフォーカスのある文書にしかパッドを見せないため、明示操作を用意する */
+      var padEnableBtn = $("padEnable");
+      if (padEnableBtn) padEnableBtn.addEventListener("click", function () {
+        try { window.focus(); } catch (e) {}
+        pollGamepad();
+        setTimeout(pollGamepad, 60);
+        setTimeout(pollGamepad, 200);
+        setTimeout(pollGamepad, 500);
+      });
+      window.addEventListener("gamepaddisconnected", function () {
+        state.padSeen = false;
+        padBtnPrev = {}; padAxisPrev = { 0: false, 3: false };
+        eachSide(function (i) { setPadInd(i, false); });
+        setPadLive("");
+        setPadStatus("未検出 — USBでつないだあと、このページを1回クリックしてから、パッドのボタンをどれか1回押してください");
+      });
+      /* ページ操作のたびにも即ポーリング（フォーカス取得直後の取りこぼし対策） */
+      window.addEventListener("pointerdown", pollGamepad, true);
+      window.addEventListener("keydown", pollGamepad, true);
+      window.addEventListener("focus", pollGamepad);
+      document.addEventListener("visibilitychange", function () { if (!document.hidden) pollGamepad(); });
+      /* 本線は setInterval、補助に rAF。どちらか一方が止まる環境でもポーリングを続ける */
+      setInterval(pollGamepad, 16);
+      (function padLoop() { pollGamepad(); requestAnimationFrame(padLoop); })();
+
+      /* ================= 初期化 =================
+         角数の正は select の選択値。JS 側の固定値と食い違うと図形が表示されない
+         事故が起きるため、必ず select から読む */
+      function syncShapeFromSelect(i) {
+        var v = parseInt($("n" + i).value, 10);
+        if (isFinite(v) && v >= 1 && v <= 12) state.sides[i].n = v;
+      }
+      function ensureShapes() {
+        /* SVG が作られていない／消えている図形だけ作り直す（初回表示の取りこぼし対策） */
+        eachSide(function (i) {
+          syncShapeFromSelect(i);
+          var wrap = $("wrap" + i);
+          if (!wrap.querySelector("svg") || !state.sides[i].els) buildSide(i);
+        });
+      }
+      buildChrome();
+      wireEvents();
+      eachSide(function (i) {
+        syncShapeFromSelect(i);
+        buildSide(i);
+      });
+      onTempoInput();
+      onModeChange();
+      updateHUD();
+      pollGamepad();
+      /* 初回描画が間に合わなかった場合の保険：次フレーム・読み込み完了・bfcache 復帰でも確認する */
+      requestAnimationFrame(ensureShapes);
+      window.addEventListener("load", ensureShapes);
+      window.addEventListener("pageshow", ensureShapes);
+    </script>
+  </body>
+</html>
